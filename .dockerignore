@@ -1,5 +1,15 @@
+.git
+.github
 node_modules
 .next
-.env
-.git
 storage
+.env
+.env.*
+!.env.example
+tests
+coverage
+*.log
+*.md
+!README.md
+docker-compose*.yml
+deploy

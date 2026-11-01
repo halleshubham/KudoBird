@@ -1,0 +1,105 @@
+# Production stack for Coolify (or any Docker host): prebuilt public images from GHCR, no build step on the server.
+# Required variables (set in Coolify > Environment Variables):
+#   IMAGE_TAG            image version to run, e.g. sha-1a2b3c4 (immutable) or latest
+#   APP_URL              public https URL, e.g. https://kudobird.shackyapps.in
+#   AUTH_SECRET          48+ random characters. BACK THIS UP: it derives the keys that encrypt contact details; losing it makes them unreadable
+#   POSTGRES_PASSWORD    password of the database owner (used for migrations only)
+#   APP_DB_PASSWORD      password of the restricted role the app runs as (created automatically at start)
+#   REDIS_PASSWORD
+# Optional: EMAIL_FROM, RESEND_API_KEY, RESEND_WEBHOOK_SECRET, TURNSTILE_SECRET_KEY, TURNSTILE_SITE_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SENTRY_DSN
+name: kudobird
+
+x-app-env: &app-env
+  NODE_ENV: production
+  APP_URL: ${APP_URL}
+  AUTH_SECRET: ${AUTH_SECRET}
+  DATABASE_URL: postgresql://kudobird_app:${APP_DB_PASSWORD}@postgres:5432/kudobird
+  DIRECT_URL: postgresql://kudobird:${POSTGRES_PASSWORD}@postgres:5432/kudobird
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+  EMAIL_FROM: ${EMAIL_FROM:-KudoBird <no-reply@localhost>}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+  TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+  TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  STORAGE_DRIVER: local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kudobird
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: kudobird
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kudobird -d kudobird"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  web:
+    image: ghcr.io/halleshubham/kudobird-web:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment: *app-env
+    volumes:
+      - appdata:/data
+    expose:
+      - "3000"
+
+  worker:
+    image: ghcr.io/halleshubham/kudobird-worker:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      web: { condition: service_healthy } # the web container runs the migrations first
+    environment: *app-env
+    volumes:
+      - appdata:/data
+    shm_size: "512m" # headless Chromium
+
+  # Nightly dump, 7 days kept. Copy /backups off the server too (see README: Backups).
+  backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: kudobird
+      POSTGRES_USER: kudobird
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "6"
+    volumes:
+      - backups:/backups
+
+volumes:
+  pgdata:
+  redisdata:
+  appdata:
+  backups:

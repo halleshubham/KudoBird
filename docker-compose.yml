@@ -1,3 +1,6 @@
+# Local development stack: databases only by default. Run the app itself with `pnpm dev` and `pnpm worker`.
+#   docker compose up -d postgres redis
+# To run the same prebuilt-style containers locally instead:  docker compose --profile app up --build
 services:
   postgres:
     image: postgres:16
@@ -17,28 +20,25 @@ services:
     image: redis:7
     ports: ["6379:6379"]
     volumes: [redisdata:/data]
+
   web:
+    profiles: ["app"]
     build: { context: ., target: web }
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_started }
-    env_file: .env
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_started } }
     environment: &appenv
+      APP_URL: http://localhost:3000
+      AUTH_SECRET: local-development-secret-change-me-0123456789abcdef
       DATABASE_URL: postgresql://kudobird_app:kudobird_app@postgres:5432/kudobird
       DIRECT_URL: postgresql://kudobird:kudobird@postgres:5432/kudobird
       REDIS_URL: redis://redis:6379
     volumes: ["appdata:/data"]
     ports: ["3000:3000"]
-    command: sh -c "pnpm exec prisma migrate deploy && node server.js"
   worker:
+    profiles: ["app"]
     build: { context: ., target: worker }
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_started }
-    env_file: .env
+    depends_on: { web: { condition: service_healthy } }
     environment: *appenv
     volumes: ["appdata:/data"]
-    restart: unless-stopped
 volumes:
   pgdata:
   redisdata:
