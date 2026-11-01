@@ -260,7 +260,8 @@ describe("delivery", () => {
     expect(e).toMatchObject({ active: false, disabledReason: expect.stringContaining("20 consecutive") });
     expect((await withTenant(c("OWNER"), (tx) => tx.auditLog.findMany({ where: { action: "webhook.auto_disabled" } }))).length).toBe(1);
     const ownerEmail = (await prisma.user.findUniqueOrThrow({ where: { id: T.owner.id } })).email;
-    expect([...consoleOutbox()].some((m) => m.to === ownerEmail && /switched off/i.test(m.subject))).toBe(true);
+    // the alert email is sent after the switch-off without being awaited, so under load it can land a moment later
+    await vi.waitFor(() => expect([...consoleOutbox()].some((m) => m.to === ownerEmail && /switched off/i.test(m.subject))).toBe(true), { timeout: 5000 });
     // a disabled endpoint no longer receives anything, and re-enabling resets the streak
     hits.length = 0; await sendTestWebhook(c("OWNER"), ep.id);
     expect(await attemptDelivery((await deliveriesFor(ep.id)).at(-1)!.id)).toBe("DEAD");

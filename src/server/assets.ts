@@ -8,7 +8,8 @@ import { OrgError, type OrgContext } from "./orgs";
 import { assertCan } from "./permissions";
 import { getStorage } from "./storage";
 
-const MAX_BYTES = 3 * 1024 * 1024;
+/** Upload limit. Larger than what is stored: every image is re-encoded smaller before it is kept (see optimizeImage). */
+const MAX_BYTES = 10 * 1024 * 1024;
 const TYPES = {
   "image/png": { ext: "png", magic: (b: Buffer) => b.subarray(0, 4).toString("hex") === "89504e47" },
   "image/jpeg": { ext: "jpg", magic: (b: Buffer) => b[0] === 0xff && b[1] === 0xd8 },
@@ -50,7 +51,7 @@ export async function uploadAsset(ctx: OrgContext, input: { kind: AssetKind; fil
   assertCan(ctx.role, input.kind === "SIGNATURE" ? "signatories.manage" : "templates.manage");
   const type = TYPES[input.mime as keyof typeof TYPES];
   if (!type || !type.magic(input.body)) throw new OrgError("BAD_FILE", "Upload a PNG, JPG or SVG image");
-  if (input.body.length > MAX_BYTES) throw new OrgError("TOO_LARGE", "Image must be 3 MB or smaller");
+  if (input.body.length > MAX_BYTES) throw new OrgError("TOO_LARGE", "Image must be 10 MB or smaller");
   if (input.mime === "image/svg+xml" && ACTIVE_SVG.test(input.body.toString("utf8"))) throw new OrgError("BAD_FILE", "SVG files with scripts are not allowed");
   const img = await optimizeImage(input.kind, input.mime, input.body); // the stored copy is what counts against the storage quota
   const id = randomUUID();

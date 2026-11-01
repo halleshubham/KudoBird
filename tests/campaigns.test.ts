@@ -225,11 +225,16 @@ describe("assets", () => {
     await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "x.png", mime: "image/png", body: Buffer.from("not an image") })).rejects.toMatchObject({ code: "BAD_FILE" });
     await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "x.png", mime: "image/png", body: Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(64)]) })).rejects.toMatchObject({ code: "BAD_FILE" }); // right header, not an image
     await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "x.svg", mime: "image/svg+xml", body: Buffer.from("<svg><script>alert(1)</script></svg>") })).rejects.toMatchObject({ code: "BAD_FILE" });
-    await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "big.png", mime: "image/png", body: Buffer.concat([png, Buffer.alloc(4 * 1024 * 1024)]) })).rejects.toMatchObject({ code: "TOO_LARGE" });
+    await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "big.png", mime: "image/png", body: Buffer.concat([png, Buffer.alloc(11 * 1024 * 1024)]) })).rejects.toMatchObject({ code: "TOO_LARGE" });
   });
   it("stores backgrounds compressed and capped at 2400px, and keeps transparency on PNGs", async () => {
     const photo = await sharp(noisy(1280, 960), { raw: { width: 1280, height: 960, channels: 3 } }).jpeg({ quality: 90, chromaSubsampling: "4:4:4" }).toBuffer();
     expect(photo.length).toBeLessThan(3 * 1024 * 1024);
+    // a 5 MB photo is now accepted and stored far smaller
+    const huge = await sharp(noisy(2000, 1500), { raw: { width: 2000, height: 1500, channels: 3 } }).jpeg({ quality: 95, chromaSubsampling: "4:4:4" }).toBuffer();
+    expect(huge.length).toBeGreaterThan(3 * 1024 * 1024);
+    expect(huge.length).toBeLessThan(10 * 1024 * 1024);
+    expect((await uploadAsset(c("EDITOR"), { kind: "BACKGROUND", filename: "huge.jpg", mime: "image/jpeg", body: huge })).bytes).toBeLessThan(huge.length * 0.6);
     const bg = await uploadAsset(c("EDITOR"), { kind: "BACKGROUND", filename: "photo.jpg", mime: "image/jpeg", body: photo });
     expect(bg.bytes).toBeLessThan(photo.length * 0.6); // re-encoded at a sensible quality
     expect(bg.mime).toBe("image/jpeg");

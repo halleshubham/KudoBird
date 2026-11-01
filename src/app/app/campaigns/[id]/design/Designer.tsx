@@ -11,14 +11,16 @@ type FontOpt = { family: string; curated: boolean };
 const SIZES = { square: [1080, 1080], story: [1080, 1920], link: [1200, 630], a4: [1754, 1240] } as const;
 const BLOCKS: [BlockKey, string][] = [["title", "Title"], ["subtitle", "Subtitle"], ["recipient", "Recipient name"], ["body", "Body"], ["footer", "Footer"]];
 
-const UPLOAD_LIMIT = 2.8 * 1024 * 1024; // the server accepts 3 MB
+const UPLOAD_LIMIT = 2.8 * 1024 * 1024; // bigger photos are shrunk here first so they upload quickly; the server accepts up to 10 MB and compresses again
 const UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,image/svg+xml";
 
 /** Phone photos are often 4-10 MB and WebP is not accepted by the server: re-encode in the browser so any normal image just works. */
 async function prepareImage(file: File): Promise<File> {
-  const direct = ["image/png", "image/jpeg", "image/svg+xml"].includes(file.type);
-  if (direct && file.size <= UPLOAD_LIMIT) return file;
-  if (file.type === "image/svg+xml") throw new Error("This SVG is larger than 3 MB. Export a simpler SVG or use a PNG or JPG.");
+  if (file.type === "image/svg+xml") {
+    if (file.size > 10 * 1024 * 1024) throw new Error("This SVG is larger than 10 MB. Export a simpler SVG or use a PNG or JPG.");
+    return file;
+  }
+  if (["image/png", "image/jpeg"].includes(file.type) && file.size <= UPLOAD_LIMIT) return file;
   const bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) throw new Error("Could not read this image. Use a PNG or JPG.");
   const keepAlpha = file.type === "image/png";

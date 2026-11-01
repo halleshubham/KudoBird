@@ -19,7 +19,7 @@ export default async function Settings() {
             <Field name="name" label="Organisation name" defaultValue={org.name} required />
             <ColorField name="primaryColor" label="Brand colour" defaultValue={org.primaryColor ?? "#0b6cf0"} hint="Used for buttons and accents on your public form." />
           </ActionForm>
-          <div className="mt-5 border-t border-black/10 pt-4"><p className="mb-2 text-sm font-medium">Logo</p><p className="mb-2 text-xs text-neutral-500">Shown on your public page. PNG, JPG or SVG up to 3 MB.</p><LogoPicker orgSlug={org.slug} hasLogo={!!org.logoAssetId} setLogo={setOrgLogoAction} /></div>
+          <div className="mt-5 border-t border-black/10 pt-4"><p className="mb-2 text-sm font-medium">Logo</p><p className="mb-2 text-xs text-neutral-500">Shown on your public page. PNG, JPG or SVG up to 10 MB.</p><LogoPicker orgSlug={org.slug} hasLogo={!!org.logoAssetId} setLogo={setOrgLogoAction} /></div>
         </div>
       ) : <p className="text-sm text-neutral-600">Only admins can change these settings.</p>}
       <div className="card">
