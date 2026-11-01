@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import { getPlatformSettings } from "@/server/platform-settings";
 import { requireSuperAdmin } from "@/server/session";
 import { logoutAction } from "../actions";
@@ -12,7 +13,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen">
       <header className="border-b border-black/10 bg-neutral-900 text-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-4 py-3 text-sm">
-          <span className="font-bold">KudoBird · Platform admin</span>
+          <span className="flex items-center gap-2 font-bold"><Logo size={22} text={false} />KudoBird · Platform admin</span>
           <nav className="flex flex-wrap gap-3">{NAV.map(([href, label]) => <Link key={href} href={href} className="text-neutral-200 hover:text-white">{label}</Link>)}</nav>
           <form action={logoutAction} className="ml-auto"><span className="mr-3 text-neutral-400">{user.email}</span><button className="underline">Sign out</button></form>
         </div>

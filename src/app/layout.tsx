@@ -4,7 +4,11 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
-export const metadata: Metadata = { title: "KudoBird", description: "Certificates of contribution for any cause" };
+export const metadata: Metadata = {
+  title: "KudoBird",
+  description: "Certificates of contribution for any cause",
+  openGraph: { title: "KudoBird", description: "Certificates of contribution for any cause", images: ["/brand/og-default.png"] },
+};
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

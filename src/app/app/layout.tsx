@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import { can } from "@/server/permissions";
 import { requireOrg } from "@/server/session";
 import { logoutAction, switchOrgAction } from "../actions";
@@ -28,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {announcement && <div className="bg-brand-50 px-4 py-2 text-center text-sm text-brand-700" role="status">{announcement}</div>}
       <header className="sticky top-0 z-10 border-b border-black/10 bg-white/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
-          <Link href="/app" className="flex items-center gap-2 text-lg font-bold tracking-tight text-neutral-900"><span className="inline-block h-5 w-5 rounded-md bg-brand-600" aria-hidden />KudoBird</Link>
+          <Link href="/app" className="text-lg"><Logo /></Link>
           <form action={switchOrgAction}>
             <select name="orgId" defaultValue={ctx.orgId} className="input !w-auto" aria-label="Organisation">
               {orgs.map((o) => <option key={o.org.id} value={o.org.id}>{o.org.name}</option>)}

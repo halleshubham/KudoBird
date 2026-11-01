@@ -41,7 +41,7 @@ export async function revokeInviteAction(fd: FormData) {
 export async function updateOrgAction(_: State, fd: FormData): Promise<State> {
   try {
     const { ctx } = await requireOrg("org.update");
-    const data = z.object({ name: z.string().trim().min(2).max(80), primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Colour must be like #7c3aed") }).parse(Object.fromEntries(fd));
+    const data = z.object({ name: z.string().trim().min(2).max(80), primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Colour must be like #0b6cf0") }).parse(Object.fromEntries(fd));
     await updateOrganization(ctx, data);
     revalidatePath("/app", "layout");
     return { info: "Saved" };

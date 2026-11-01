@@ -16,7 +16,7 @@ export default async function Settings() {
         <div className="card">
           <ActionForm action={updateOrgAction} submit="Save">
             <Field name="name" label="Name" defaultValue={org.name} required />
-            <Field name="primaryColor" label="Brand colour" defaultValue={org.primaryColor ?? "#7c3aed"} pattern="#[0-9a-fA-F]{6}" required />
+            <Field name="primaryColor" label="Brand colour" defaultValue={org.primaryColor ?? "#0b6cf0"} pattern="#[0-9a-fA-F]{6}" required />
           </ActionForm>
           <div className="mt-4 border-t pt-4"><p className="mb-2 text-sm font-medium">Logo (shown on your public page)</p><LogoPicker orgSlug={org.slug} hasLogo={!!org.logoAssetId} setLogo={setOrgLogoAction} /></div>
         </div>

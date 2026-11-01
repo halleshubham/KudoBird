@@ -1,5 +1,6 @@
-import { Body, Button, Container, Head, Html, Preview, Text } from "@react-email/components";
+import { Body, Button, Container, Head, Html, Img, Preview, Text } from "@react-email/components";
 import * as React from "react";
+import { appUrl } from "../urls";
 
 interface ActionEmailProps {
   preview: string;
@@ -18,11 +19,12 @@ export function ActionEmail({ preview, heading, body, actionLabel, actionUrl, fo
       <Preview>{preview}</Preview>
       <Body style={{ fontFamily: "system-ui, sans-serif", background: "#f6f6f4", padding: "24px" }}>
         <Container style={{ background: "#fff", borderRadius: 8, padding: 32, maxWidth: 480 }}>
-          <Text style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{heading}</Text>
+          <Img src={appUrl("/brand/bird-256.png")} width={44} height={44} alt="KudoBird" />
+          <Text style={{ fontSize: 20, fontWeight: 700, margin: "12px 0 0" }}>{heading}</Text>
           <Text style={{ fontSize: 15, lineHeight: "22px" }}>{body}</Text>
           <Button
             href={actionUrl}
-            style={{ background: "#7c3aed", color: "#fff", padding: "12px 20px", borderRadius: 6, fontWeight: 600 }}
+            style={{ background: "#0b6cf0", color: "#fff", padding: "12px 20px", borderRadius: 6, fontWeight: 600 }}
           >
             {actionLabel}
           </Button>
@@ -50,7 +52,7 @@ export function ContributorEmail({ locale, hello, intro, note, buttonLabel, url,
           <Text style={{ fontSize: 15, lineHeight: "24px", whiteSpace: "pre-line" }}>{intro}</Text>
           {note && <Text style={{ fontSize: 13, color: "#555" }}>{note}</Text>}
           {url && buttonLabel && (
-            <Button href={url} style={{ background: accent ?? "#7c3aed", color: "#fff", padding: "12px 20px", borderRadius: 6, fontWeight: 600 }}>{buttonLabel}</Button>
+            <Button href={url} style={{ background: accent ?? "#0b6cf0", color: "#fff", padding: "12px 20px", borderRadius: 6, fontWeight: 600 }}>{buttonLabel}</Button>
           )}
           <Text style={{ fontSize: 12, color: "#777", marginTop: 24 }}>{footer}</Text>
         </Container>
@@ -69,7 +71,7 @@ export function AdminEntriesEmail({ heading, lines, actionLabel, actionUrl }: { 
         <Container style={card}>
           <Text style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{heading}</Text>
           {lines.map((l, i) => <Text key={i} style={{ fontSize: 14, margin: "4px 0" }}>• {l}</Text>)}
-          <Button href={actionUrl} style={{ background: "#7c3aed", color: "#fff", padding: "10px 18px", borderRadius: 6, fontWeight: 600, marginTop: 16 }}>{actionLabel}</Button>
+          <Button href={actionUrl} style={{ background: "#0b6cf0", color: "#fff", padding: "10px 18px", borderRadius: 6, fontWeight: 600, marginTop: 16 }}>{actionLabel}</Button>
           <Text style={{ fontSize: 12, color: "#777", marginTop: 24 }}>You can change how often you get these in Settings → Notifications.</Text>
         </Container>
       </Body>

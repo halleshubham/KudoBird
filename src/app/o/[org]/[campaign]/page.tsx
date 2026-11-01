@@ -44,7 +44,7 @@ export default async function PublicCampaignPage({ params, searchParams }: { par
           consentRequired={c.settings.consentRequired} consentText={c.settings.consentText[lang] || m.consent}
           purposeText={c.settings.purposeText[lang] || m.purpose}
           wall={c.settings.wallEnabled} captchaSiteKey={c.settings.captcha ? process.env.TURNSTILE_SITE_KEY : undefined}
-          accent={c.org.primaryColor ?? "#7c3aed"}
+          accent={c.org.primaryColor ?? "#0b6cf0"}
         />
       )}
     </main>

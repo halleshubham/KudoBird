@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import { redirect } from "next/navigation";
 import { currentSession } from "@/server/session";
 
@@ -13,10 +14,12 @@ export default async function Home() {
   return (
     <main className="mx-auto max-w-5xl px-4">
       <header className="flex items-center justify-between py-5">
-        <span className="flex items-center gap-2 text-lg font-bold tracking-tight"><span className="inline-block h-5 w-5 rounded-md bg-brand-600" aria-hidden />KudoBird</span>
+        <Logo className="text-lg" />
         <nav className="flex items-center gap-2"><Link href="/login" className="btn-ghost">Sign in</Link><Link href="/signup" className="btn">Sign up</Link></nav>
       </header>
-      <section className="py-16 text-center sm:py-24">
+      <section className="py-12 text-center sm:py-20">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/bird.png" alt="" width={140} height={140} className="mx-auto mb-4 h-32 w-32" />
         <h1 className="mx-auto max-w-3xl text-4xl font-extrabold leading-[1.1] sm:text-6xl">
           Thank everyone with<br /><span className="text-brand-600">beautiful certificates</span>
         </h1>

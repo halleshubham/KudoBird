@@ -30,7 +30,7 @@ export default async function EmbeddedForm({ params, searchParams }: { params: P
           org={org} campaign={campaign} lang={lang} dial={dialCode(c.settings)} otp={c.settings.otpEnabled} linkTarget="_blank"
           fields={c.fields.map((f) => ({ key: f.key, label: fieldLabel(f, lang), type: f.type, required: f.required, options: f.options }))}
           consentRequired={c.settings.consentRequired} consentText={c.settings.consentText[lang] || m.consent} purposeText={c.settings.purposeText[lang] || m.purpose}
-          wall={c.settings.wallEnabled} captchaSiteKey={c.settings.captcha ? process.env.TURNSTILE_SITE_KEY : undefined} accent={c.org.primaryColor ?? "#7c3aed"}
+          wall={c.settings.wallEnabled} captchaSiteKey={c.settings.captcha ? process.env.TURNSTILE_SITE_KEY : undefined} accent={c.org.primaryColor ?? "#0b6cf0"}
         />
       )}
     </main>
