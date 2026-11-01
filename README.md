@@ -250,3 +250,6 @@ Also back up the `appdata` volume (rendered certificates and uploads) if you can
 5. ✅ Dashboard, bulk issue, audit log
 6. ✅ Super admin panel
 7. ✅ API, webhooks, embeds
+
+## Design and UX
+Screens follow [docs/ui-ux-guidelines.md](docs/ui-ux-guidelines.md). Run `pnpm ux:audit` against a running, seeded app to check accessibility and mobile layout. History of the last audit: [docs/ux-audit.md](docs/ux-audit.md).

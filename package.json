@@ -18,7 +18,8 @@
     "fonts:sync": "tsx scripts/fonts.ts sync",
     "fonts:bundle": "tsx scripts/fonts.ts bundle",
     "worker": "tsx src/worker/index.ts",
-    "certificates:backfill": "tsx scripts/backfill-certificates.ts"
+    "certificates:backfill": "tsx scripts/backfill-certificates.ts",
+    "ux:audit": "node scripts/ux-audit.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",
@@ -44,6 +45,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.6.2",
+    "axe-core": "^4.14.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.28",
     "pixelmatch": "^5.3.0",
