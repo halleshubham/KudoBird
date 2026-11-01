@@ -424,3 +424,24 @@ describe("starter templates, fonts, audit, stats", () => {
     void o;
   });
 });
+
+describe("SUPER_ADMIN_EMAILS bootstrap", () => {
+  it("creates a passwordless verified super admin, promotes an existing user, ignores junk, and is idempotent", async () => {
+    const { ensureSuperAdmins } = await import("@/server/reference-data");
+    const fresh = `boot-${randomUUID()}@test.local`;
+    const existing = `boot-${randomUUID()}@test.local`;
+    const u = await registerUser({ email: existing, password: "password123" });
+    createdUsers.push(u.id);
+    const list = ` ${fresh.toUpperCase()}, ${existing},not-an-email,, ${fresh}`;
+    expect(await ensureSuperAdmins(list)).toEqual([fresh, existing]);
+    await ensureSuperAdmins(list); // second start: no change, no error
+    const made = await prisma.user.findUniqueOrThrow({ where: { email: fresh } });
+    createdUsers.push(made.id);
+    expect(made).toMatchObject({ isSuperAdmin: true, passwordHash: null });
+    expect(made.emailVerifiedAt).not.toBeNull();
+    const promoted = await prisma.user.findUniqueOrThrow({ where: { email: existing } });
+    expect(promoted.isSuperAdmin).toBe(true);
+    expect(promoted.passwordHash).not.toBeNull(); // existing password untouched
+    expect(await ensureSuperAdmins(undefined)).toEqual([]);
+  });
+});

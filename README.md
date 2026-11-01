@@ -67,6 +67,8 @@ pnpm create-super-admin you@example.com 'a-long-password' 'Your Name'
 
 Sign in at `/login`; two-factor authentication (TOTP) enrolment is forced for super admins.
 
+On a deployed stack with no shell access, set `SUPER_ADMIN_EMAILS` (comma separated) in the environment and restart: each address is promoted at start-up (created without a password if new). They then use **Email me a sign-in link** on `/login` and enrol 2FA. It only promotes; demote from the admin screens.
+
 ## Creating an organisation
 
 Sign up at `/signup`, then name your workspace. You become its **Owner** and the org is placed on the Free plan.

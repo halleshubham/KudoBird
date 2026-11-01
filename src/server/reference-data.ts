@@ -26,3 +26,20 @@ export async function ensureReferenceData() {
   });
   return { plan };
 }
+
+/**
+ * Promotes the operator-listed addresses (env SUPER_ADMIN_EMAILS, comma separated) to platform super admin on every start. Idempotent, promote-only:
+ * removing an address from the list does not demote it (use the admin screens). A missing account is created WITHOUT a password and marked
+ * verified because the operator vouched for it; the person signs in with "Email me a sign-in link" (which needs their inbox) and must enrol 2FA.
+ */
+export async function ensureSuperAdmins(list: string | undefined): Promise<string[]> {
+  const emails = [...new Set((list ?? "").split(",").map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
+  for (const email of emails) {
+    await prisma.user.upsert({
+      where: { email },
+      create: { email, isSuperAdmin: true, emailVerifiedAt: new Date() },
+      update: { isSuperAdmin: true, emailVerifiedAt: new Date() },
+    });
+  }
+  return emails;
+}

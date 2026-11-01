@@ -2,7 +2,7 @@
  *   1. wait for Postgres
  *   2. create / refresh the restricted application role (the one the app connects as) using the owner connection
  *   3. run `prisma migrate deploy`
- *   4. load reference data (Free plan, bundled fonts, starter templates)
+ *   4. load reference data (Free plan, bundled fonts, starter templates) and promote SUPER_ADMIN_EMAILS
  *   5. REFUSE TO START if the application role could bypass Row Level Security
  * DIRECT_URL = owner connection (migrations). DATABASE_URL = restricted role the app uses (password is applied to the role here). */
 import { spawnSync } from "node:child_process";
@@ -57,10 +57,12 @@ async function main() {
 
   // Imported only now so DATABASE_URL (restricted role) is what these modules connect with.
   const { prisma } = await import("../src/server/db");
-  const { ensureReferenceData } = await import("../src/server/reference-data");
+  const { ensureReferenceData, ensureSuperAdmins } = await import("../src/server/reference-data");
   await waitFor(prisma as unknown as PrismaClient, "the database (application role)");
   await ensureReferenceData();
   console.log("[bootstrap] reference data ready");
+  const admins = await ensureSuperAdmins(process.env.SUPER_ADMIN_EMAILS);
+  if (admins.length) console.log(`[bootstrap] super admin access ensured for ${admins.length} address(es)`);
 
   const [r] = await prisma.$queryRaw<{ rolsuper: boolean; rolbypassrls: boolean }[]>`SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`;
   if (r.rolsuper || r.rolbypassrls) fail("The application database role can bypass Row Level Security. Refusing to start.");

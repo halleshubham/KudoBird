@@ -6,7 +6,7 @@
 #   POSTGRES_PASSWORD    password of the database owner (used for migrations only)
 #   APP_DB_PASSWORD      password of the restricted role the app runs as (created automatically at start)
 #   REDIS_PASSWORD
-# Optional: EMAIL_FROM, RESEND_API_KEY, RESEND_WEBHOOK_SECRET, TURNSTILE_SECRET_KEY, TURNSTILE_SITE_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SENTRY_DSN
+# Optional: SUPER_ADMIN_EMAILS, EMAIL_FROM, RESEND_API_KEY, RESEND_WEBHOOK_SECRET, TURNSTILE_SECRET_KEY, TURNSTILE_SITE_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SENTRY_DSN
 name: kudobird
 
 x-app-env: &app-env
@@ -24,6 +24,8 @@ x-app-env: &app-env
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
   SENTRY_DSN: ${SENTRY_DSN:-}
+  # Comma-separated addresses promoted to platform super admin at start (promote-only). They sign in with an emailed link and must enrol 2FA.
+  SUPER_ADMIN_EMAILS: ${SUPER_ADMIN_EMAILS:-}
   # Cloudflare R2 is used when these are set; otherwise files stay on the shared /data volume.
   R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
   S3_BUCKET: ${S3_BUCKET:-}
