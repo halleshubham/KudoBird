@@ -25,6 +25,10 @@ export const designSchema = z.object({
     color,
     gradientTo: color.nullable().default(null),
     assetId: z.string().uuid().nullable().default(null),
+    /** How the background image fills the page. */
+    fit: z.enum(["cover", "contain"]).default("cover"),
+    /** 0-0.9: how strongly the background colour is laid over the image, to keep text readable. */
+    overlay: z.number().min(0).max(0.9).default(0),
   }),
   border: z.object({
     style: z.enum(["none", "solid", "double", "ornate"]),

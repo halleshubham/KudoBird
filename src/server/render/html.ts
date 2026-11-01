@@ -48,7 +48,9 @@ function borderCss(d: Design["border"]): string {
 export function renderCertificateHtml(input: RenderInput): string {
   const { design: d, data, assets, size } = input;
   const unit = Math.min(size.w, size.h) / 100;
-  const bg = d.background.assetId && assets[d.background.assetId] ? `url(${assets[d.background.assetId]}) center/cover no-repeat, ` : "";
+  const img = d.background.assetId ? assets[d.background.assetId] : undefined;
+  const wash = d.background.overlay > 0 ? `linear-gradient(color-mix(in srgb, ${d.background.color} ${Math.round(d.background.overlay * 100)}%, transparent), color-mix(in srgb, ${d.background.color} ${Math.round(d.background.overlay * 100)}%, transparent)), ` : "";
+  const bg = img ? `${wash}url(${img}) center/${d.background.fit} no-repeat, ` : "";
   const grad = d.background.gradientTo ? `linear-gradient(160deg, ${d.background.color}, ${d.background.gradientTo})` : d.background.color;
   const logos = d.logos.assetIds.map((id) => assets[id]).filter(Boolean);
   const justify = { "top-left": "flex-start", "top-center": "center", "top-right": "flex-end" }[d.logos.position];

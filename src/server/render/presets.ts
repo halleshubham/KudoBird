@@ -26,7 +26,7 @@ export function presetDesign(preset: Preset, locale: Locale = "en"): Design {
     case "classic":
       return {
         version: 1, preset,
-        background: { color: "#fffdf7", gradientTo: null, assetId: null },
+        background: { color: "#fffdf7", gradientTo: null, assetId: null, fit: "cover", overlay: 0 },
         border: { style: "double", color: "#8a6d1d", width: 0.9, inset: 3 },
         logos: { assetIds: [], position: "top-center", height: 10 },
         blocks: {
@@ -42,7 +42,7 @@ export function presetDesign(preset: Preset, locale: Locale = "en"): Design {
     case "modern":
       return {
         version: 1, preset,
-        background: { color: "#ffffff", gradientTo: "#eef2ff", assetId: null },
+        background: { color: "#ffffff", gradientTo: "#eef2ff", assetId: null, fit: "cover", overlay: 0 },
         border: { style: "solid", color: "#4f46e5", width: 2.2, inset: 0 },
         logos: { assetIds: [], position: "top-left", height: 9 },
         blocks: {
@@ -58,7 +58,7 @@ export function presetDesign(preset: Preset, locale: Locale = "en"): Design {
     case "minimal":
       return {
         version: 1, preset,
-        background: { color: "#ffffff", gradientTo: null, assetId: null },
+        background: { color: "#ffffff", gradientTo: null, assetId: null, fit: "cover", overlay: 0 },
         border: { style: "none", color: "#000000", width: 0, inset: 0 },
         logos: { assetIds: [], position: "top-center", height: 8 },
         blocks: {
@@ -74,7 +74,7 @@ export function presetDesign(preset: Preset, locale: Locale = "en"): Design {
     case "festive":
       return {
         version: 1, preset,
-        background: { color: "#fff7e6", gradientTo: "#ffe2b8", assetId: null },
+        background: { color: "#fff7e6", gradientTo: "#ffe2b8", assetId: null, fit: "cover", overlay: 0 },
         border: { style: "ornate", color: "#b45309", width: 1.2, inset: 2.6 },
         logos: { assetIds: [], position: "top-center", height: 10 },
         blocks: {

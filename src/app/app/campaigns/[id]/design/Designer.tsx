@@ -1,6 +1,7 @@
 "use client";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import type { Design, BlockKey } from "@/server/render/design";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { designFonts, type Design, type BlockKey } from "@/server/render/design";
+import { renderCertificateHtml } from "@/server/render/html";
 
 type Preset = { key: string; name: string; description: string; design: Design };
 type Sig = { id: string; name: string; designation: string; assetId: string | null };
@@ -38,31 +39,36 @@ function FontPicker({ value, onChange }: { value: string; onChange: (f: string) 
 
 export function Designer(props: {
   campaignId: string; templateId: string; initial: Design; presets: Preset[]; logos: Asset[]; signatories: Sig[]; selectedSignatoryIds: string[];
-  canEdit: boolean; version: number;
+  sample: { data: Record<string, string>; qrSrc: string }; canEdit: boolean; version: number;
   save: (campaignId: string, templateId: string, design: unknown, sigs: string[]) => Promise<{ error?: string; info?: string }>;
 }) {
   const [design, setDesign] = useState<Design>(props.initial);
   const [sigIds, setSigIds] = useState<string[]>(props.selectedSignatoryIds);
   const [logos, setLogos] = useState<Asset[]>(props.logos);
   const [size, setSize] = useState<keyof typeof SIZES>("square");
-  const [html, setHtml] = useState("");
+  const [fontCss, setFontCss] = useState("");
   const [msg, setMsg] = useState<{ error?: string; info?: string }>();
   const [pending, start] = useTransition();
   const box = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
   const [w, h] = SIZES[size];
 
-  // live preview (debounced)
+  // Fonts: same-origin @font-face rules for the families in use (missing ones are downloaded once by the server).
+  const fontKey = designFonts(design).sort().join("\n");
   useEffect(() => {
     const ctl = new AbortController();
-    const t = setTimeout(async () => {
-      const res = await fetch("/api/preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId: props.campaignId, design, size }), signal: ctl.signal }).catch(() => null);
-      if (!res) return;
-      if (res.ok) setHtml(await res.text());
-      else setMsg({ error: (await res.json().catch(() => ({}))).error ?? "Preview failed" });
-    }, 350);
-    return () => { clearTimeout(t); ctl.abort(); };
-  }, [design, size, props.campaignId]);
+    const qs = fontKey.split("\n").map((f) => `f=${encodeURIComponent(f)}`).join("&");
+    fetch(`/api/fonts/css?${qs}`, { signal: ctl.signal }).then((r) => (r.ok ? r.text() : "")).then((css) => css && setFontCss(css)).catch(() => {});
+    return () => ctl.abort();
+  }, [fontKey]);
+
+  // The preview is rendered right here with the same pure function the worker uses, so every control updates instantly.
+  const html = useMemo(() => {
+    const assets: Record<string, string> = {};
+    for (const id of [...design.logos.assetIds, design.background.assetId]) if (id) assets[id] = `/api/assets/${id}`;
+    const signatories = sigIds.flatMap((id) => props.signatories.find((x) => x.id === id) ?? []).map((s) => ({ name: s.name, designation: s.designation, imageSrc: s.assetId ? `/api/assets/${s.assetId}` : null }));
+    return renderCertificateHtml({ design, data: props.sample.data, assets, signatories, qrSrc: props.sample.qrSrc, size: { w, h }, fontCss });
+  }, [design, sigIds, fontCss, w, h, props.signatories, props.sample]);
 
   useEffect(() => {
     const el = box.current;
@@ -111,8 +117,13 @@ export function Designer(props: {
               <label>Border width<input type="range" min={0} max={4} step={0.1} value={design.border.width} onChange={(e) => set((d) => { d.border.width = Number(e.target.value); return d; })} /></label>
               <label>Inset<input type="range" min={0} max={8} step={0.2} value={design.border.inset} onChange={(e) => set((d) => { d.border.inset = Number(e.target.value); return d; })} /></label>
             </div>
-            <div className="mt-2"><label>Background image<input type="file" accept="image/png,image/jpeg" className="input" onChange={(e) => e.target.files?.[0] && upload("BACKGROUND", e.target.files[0])} /></label>
-              {design.background.assetId && <button type="button" className="text-red-600" onClick={() => set((d) => { d.background.assetId = null; return d; })}>Remove image</button>}</div>
+            <div className="mt-2"><label>Background image<input type="file" accept="image/png,image/jpeg,image/svg+xml" className="input" onChange={(e) => e.target.files?.[0] && upload("BACKGROUND", e.target.files[0])} /></label>
+              {design.background.assetId && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label>Image fit<select className="input" value={design.background.fit} onChange={(e) => set((d) => { d.background.fit = e.target.value as Design["background"]["fit"]; return d; })}><option value="cover">Fill page</option><option value="contain">Fit inside</option></select></label>
+                  <label>Colour wash<input type="range" min={0} max={0.9} step={0.05} value={design.background.overlay} onChange={(e) => set((d) => { d.background.overlay = Number(e.target.value); return d; })} /></label>
+                  <button type="button" className="text-left text-red-600" onClick={() => set((d) => { d.background.assetId = null; return d; })}>Remove image</button>
+                </div>)}</div>
           </details>
           <details className="card"><summary className="cursor-pointer font-semibold">Logos</summary>
             <div className="mt-2 space-y-2">
@@ -136,7 +147,10 @@ export function Designer(props: {
             return (
               <details key={key} className="card"><summary className="cursor-pointer font-semibold">{label}</summary>
                 <div className="mt-2 space-y-2">
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={b.show} onChange={(e) => set((d) => { d.blocks[key].show = e.target.checked; return d; })} /> Show</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2"><input type="checkbox" checked={b.show} onChange={(e) => set((d) => { d.blocks[key].show = e.target.checked; return d; })} /> Show</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" checked={b.italic} onChange={(e) => set((d) => { d.blocks[key].italic = e.target.checked; return d; })} /> Italic</label>
+                  </div>
                   <textarea className="input" rows={key === "body" ? 3 : 2} value={b.text} onChange={(e) => set((d) => { d.blocks[key].text = e.target.value; return d; })} />
                   <FontPicker value={b.font} onChange={(f) => set((d) => { d.blocks[key].font = f; return d; })} />
                   <div className="grid grid-cols-2 gap-2">
@@ -159,8 +173,15 @@ export function Designer(props: {
               {props.signatories.filter((s) => !sigIds.includes(s.id)).map((s) => (
                 <button key={s.id} type="button" className="btn-ghost mr-1" disabled={sigIds.length >= 4} onClick={() => setSigIds((a) => [...a, s.id])}>+ {s.name}</button>
               ))}
+              <label className="flex items-center gap-2"><input type="checkbox" checked={design.signatories.show} onChange={(e) => set((d) => { d.signatories.show = e.target.checked; return d; })} /> Show signatories</label>
+              <FontPicker value={design.signatories.font} onChange={(f) => set((d) => { d.signatories.font = f; return d; })} />
+              <div className="grid grid-cols-2 gap-2">
+                <label>Signature text size<input type="range" min={1} max={8} step={0.1} value={design.signatories.size} onChange={(e) => set((d) => { d.signatories.size = Number(e.target.value); return d; })} /></label>
+                <label>Signature colour<input type="color" className="input !p-1" value={design.signatories.color} onChange={(e) => set((d) => { d.signatories.color = e.target.value; return d; })} /></label>
+              </div>
               <label className="flex items-center gap-2"><input type="checkbox" checked={design.qr.show} onChange={(e) => set((d) => { d.qr.show = e.target.checked; return d; })} /> Show verification QR code</label>
               <label>QR position<select className="input" value={design.qr.position} onChange={(e) => set((d) => { d.qr.position = e.target.value as Design["qr"]["position"]; return d; })}><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option></select></label>
+              <label>QR size<input type="range" min={6} max={20} step={0.5} value={design.qr.size} onChange={(e) => set((d) => { d.qr.size = Number(e.target.value); return d; })} /></label>
             </div>
           </details>
           <div className="flex items-center gap-3">
@@ -179,7 +200,7 @@ export function Designer(props: {
         <div ref={box} className="w-full overflow-hidden rounded border bg-gray-100" style={{ height: h * scale }}>
           <iframe title="Certificate preview" srcDoc={html} sandbox="allow-same-origin" style={{ width: w, height: h, border: 0, transform: `scale(${scale})`, transformOrigin: "top left", background: "#fff" }} />
         </div>
-        <p className="text-xs text-gray-500">Preview uses sample data. Saving creates a new version; certificates already issued keep the version they were issued with.</p>
+        <p className="text-xs text-gray-500">Preview uses sample data and updates as you type. Saving creates a new version; certificates already issued keep the version they were issued with.</p>
       </div>
     </div>
   );
