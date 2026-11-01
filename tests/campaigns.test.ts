@@ -11,7 +11,9 @@ import {
 import { setCaptcha } from "@/server/security/captcha";
 import { lastOtp, setOtpProvider } from "@/server/security/otp";
 import { sendOtp, verifyOtp } from "@/server/security/otp";
+import sharp from "sharp";
 import { uploadAsset } from "@/server/assets";
+import { getStorage } from "@/server/storage";
 import { setStorage } from "@/server/storage";
 import { presetDesign } from "@/server/render/presets";
 import { cleanup, makeOrg } from "./helpers";
@@ -205,17 +207,48 @@ describe("public submission", () => {
 });
 
 describe("assets", () => {
-  const png = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(64)]);
+  let png: Buffer;
+  const noisy = (w: number, h: number) => {
+    const raw = Buffer.alloc(w * h * 3);
+    for (let i = 0; i < raw.length; i++) raw[i] = (i * 2654435761) >>> 24; // deterministic texture
+    return raw;
+  };
+  const mem = new Map<string, Buffer>();
+  beforeAll(async () => {
+    setStorage({ put: async (k, b) => { mem.set(k, b); }, get: async (k) => mem.get(k) ?? null, delete: async (k) => { mem.delete(k); } });
+    png = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#3366cc" } }).png().toBuffer();
+  });
   it("accepts a real PNG, rejects wrong types, scripts in SVG, and oversize files", async () => {
     const a = await uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "logo.png", mime: "image/png", body: png });
-    expect(a.bytes).toBe(png.length);
+    expect(a.bytes).toBeGreaterThan(0);
+    expect(a.bytes).toBeLessThanOrEqual(png.length); // never stored larger than uploaded
     await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "x.png", mime: "image/png", body: Buffer.from("not an image") })).rejects.toMatchObject({ code: "BAD_FILE" });
+    await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "x.png", mime: "image/png", body: Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(64)]) })).rejects.toMatchObject({ code: "BAD_FILE" }); // right header, not an image
     await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "x.svg", mime: "image/svg+xml", body: Buffer.from("<svg><script>alert(1)</script></svg>") })).rejects.toMatchObject({ code: "BAD_FILE" });
     await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "big.png", mime: "image/png", body: Buffer.concat([png, Buffer.alloc(4 * 1024 * 1024)]) })).rejects.toMatchObject({ code: "TOO_LARGE" });
   });
-  it("signature uploads need signatory permission; storage quota is enforced per org", async () => {
+  it("stores backgrounds compressed and capped at 2400px, and keeps transparency on PNGs", async () => {
+    const photo = await sharp(noisy(1280, 960), { raw: { width: 1280, height: 960, channels: 3 } }).jpeg({ quality: 90, chromaSubsampling: "4:4:4" }).toBuffer();
+    expect(photo.length).toBeLessThan(3 * 1024 * 1024);
+    const bg = await uploadAsset(c("EDITOR"), { kind: "BACKGROUND", filename: "photo.jpg", mime: "image/jpeg", body: photo });
+    expect(bg.bytes).toBeLessThan(photo.length * 0.6); // re-encoded at a sensible quality
+    expect(bg.mime).toBe("image/jpeg");
+    const wide = await sharp({ create: { width: 3600, height: 2400, channels: 3, background: "#cc9933" } }).jpeg({ quality: 90 }).toBuffer();
+    const big = await uploadAsset(c("EDITOR"), { kind: "BACKGROUND", filename: "wide.jpg", mime: "image/jpeg", body: wide });
+    const stored = await sharp((await getStorage().get(big.storageKey))!).metadata();
+    expect(Math.max(stored.width!, stored.height!)).toBe(2400);
+    const overlay = await sharp({ create: { width: 200, height: 200, channels: 4, background: { r: 10, g: 20, b: 200, alpha: 0.4 } } }).png().toBuffer();
+    const o = await uploadAsset(c("EDITOR"), { kind: "BACKGROUND", filename: "overlay.png", mime: "image/png", body: overlay });
+    expect(o.mime).toBe("image/png");
+    expect((await sharp((await getStorage().get(o.storageKey))!).metadata()).hasAlpha).toBe(true);
+  });
+  it("signature uploads need signatory permission; storage quota counts the stored size and is enforced per org", async () => {
     await expect(uploadAsset(c("EDITOR"), { kind: "SIGNATURE", filename: "s.png", mime: "image/png", body: png })).rejects.toThrow(/Forbidden/);
-    await withPlatform((tx) => tx.organization.update({ where: { id: T.org.id }, data: { limitOverrides: { limits: { storageBytes: png.length * 2 } } } }));
+    const key = { orgId_metric_period: { orgId: T.org.id, metric: "storage_bytes", period: "total" } };
+    const used = Number((await withPlatform((tx) => tx.usageCounter.findUnique({ where: key })))?.value ?? 0);
+    const one = (await uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "probe.png", mime: "image/png", body: png })).bytes;
+    expect(Number((await withPlatform((tx) => tx.usageCounter.findUnique({ where: key })))!.value)).toBe(used + one);
+    await withPlatform((tx) => tx.organization.update({ where: { id: T.org.id }, data: { limitOverrides: { limits: { storageBytes: used + one + Math.floor(one * 1.5) } } } }));
     await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "2.png", mime: "image/png", body: png })).resolves.toBeTruthy();
     await expect(uploadAsset(c("EDITOR"), { kind: "LOGO", filename: "3.png", mime: "image/png", body: png })).rejects.toMatchObject({ code: "LIMIT_REACHED" });
   });
