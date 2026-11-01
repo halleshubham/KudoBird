@@ -1,11 +1,12 @@
 import Link from "next/link";
 
-export function CampaignTabs({ id, active }: { id: string; active: "overview" | "form" | "design" | "entries" }) {
+export function CampaignTabs({ id, active }: { id: string; active: "overview" | "form" | "design" | "entries" | "bulk" }) {
   const tabs = [
     ["overview", "Overview", `/app/campaigns/${id}`],
     ["form", "Form", `/app/campaigns/${id}/form`],
     ["design", "Certificate design", `/app/campaigns/${id}/design`],
     ["entries", "Entries", `/app/campaigns/${id}/entries`],
+    ["bulk", "Bulk issue", `/app/campaigns/${id}/bulk`],
   ] as const;
   return (
     <nav className="flex gap-1 overflow-x-auto border-b text-sm">

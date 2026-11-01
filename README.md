@@ -3,7 +3,7 @@
 Multi-tenant platform for issuing contribution / participation certificates for any organisation, campaign or event.
 Free for now; plans, limits and feature flags are already wired through one entitlement service.
 
-> Status: **Stage 4 of 7** (sharing and Resend emails). Stages 5 to 7 are still to come. See the roadmap at the bottom.
+> Status: **Stage 5 of 7** (dashboard, bulk issue, audit log, privacy tools). Stages 6 and 7 are still to come. See the roadmap at the bottom.
 
 ## Stack
 
@@ -143,6 +143,18 @@ Subject and intro text can be overridden per campaign in Marathi, Hindi and Engl
 Delivery status (sent, delivered, bounced, complained, ...) appears per entry. A **permanent bounce or a complaint suppresses that address platform-wide**, so no org can mail it again. Soft bounces are recorded but do not suppress.
 Contributor emails count against the plan's `emailsPerMonth`; the default sender is the platform domain. A plan-gated custom sender (`customEmailSender`, `Organization.emailFrom` + `emailDomainVerified`) is wired into sending, but the in-app domain verification screen is not built yet.
 
+## Dashboard, bulk issue, audit log
+
+- **Dashboard** (`/app`): certificates issued (all time and this month), pending approvals, entries, views, share clicks, a 30-day chart (hover for numbers, "View as table" for the same data), shares by platform, top campaigns and plan usage.
+- **Bulk issue** (campaign -> *Bulk issue*): upload a CSV with `name`, `mobile`, optional `email` and the campaign's custom field keys (a template is downloadable). You see a **preview before anything is created**: valid rows, duplicates (in the file and against existing entries, following the campaign's duplicate policy), invalid rows with reasons, and whether the batch fits the plan's monthly allowance. Mobiles are masked in the preview. Issuing needs an explicit **consent attestation**; emails are only sent if you tick the option. The server re-validates the file on commit; the whole batch is refused if it exceeds the plan limit. Up to 2,000 rows per upload.
+- **Audit log** (owners and admins): filterable, paged, with the actor's email, and support access by platform staff is marked.
+- **Entries CSV export**: masked by default; a full export (real mobiles/emails) needs the manage-entries permission and is written to the audit log. Every cell is neutralised against spreadsheet formula injection.
+- **Org branding**: name, colour and logo under *Settings*; a public page at `/o/{org}` lists the org's active campaigns.
+
+## Privacy (India DPDP Act basics)
+
+Consent text and stated purpose are shown on the form and the consent time and wording are stored per entry. For a request from a person: **Export data** (JSON of everything held about them) and **Erase data** (name, mobile, email and custom answers are irreversibly blanked, images are deleted, the certificate is revoked as "erased"; the number stays so numbering is not disturbed). Both are audit-logged, and need the manage-entries permission. **Retention**: set "Erase contributors' personal data after N days" on a campaign and the worker erases older entries daily (03:30 IST). Mobile numbers and emails are encrypted at rest and masked in lists.
+
 ## Plans and entitlements
 
 `src/server/entitlements.ts` is the only place that decides whether an org may do something
@@ -172,6 +184,6 @@ Put the `web` service behind a TLS-terminating proxy (Caddy/nginx). Back up Post
 2. ✅ Campaigns, public form, certificate designer
 3. ✅ Rendering worker and certificate pages
 4. ✅ Sharing and Resend emails (demo checkpoint)
-5. Dashboard, bulk issue, audit log
+5. ✅ Dashboard, bulk issue, audit log
 6. Super admin panel
 7. API, webhooks, embeds

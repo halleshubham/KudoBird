@@ -65,3 +65,12 @@ export async function setNotificationsAction(fd: FormData) {
   });
   revalidatePath("/app/settings");
 }
+
+export async function setOrgLogoAction(assetId: string | null): Promise<{ error?: string }> {
+  try {
+    const { ctx } = await requireOrg("org.update");
+    await updateOrganization(ctx, { logoAssetId: assetId });
+    revalidatePath("/app", "layout");
+    return {};
+  } catch (e) { return { error: fail(e)?.error ?? "Something went wrong" }; }
+}

@@ -4,6 +4,9 @@ import { can } from "@/server/permissions";
 import { requireOrg } from "@/server/session";
 import { EntryStatus } from "@prisma/client";
 import { certificateAction, resendEmailAction, reviewEntryAction } from "../../actions";
+import { eraseEntryAction } from "../../bulk-actions";
+import { ExportDataButton } from "./ExportDataButton";
+import { exportEntryDataAction } from "../../bulk-actions";
 
 export default async function Entries({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; status?: string; page?: string }> }) {
   const { id } = await params;
@@ -22,6 +25,8 @@ export default async function Entries({ params, searchParams }: { params: Promis
         <select name="status" defaultValue={sp.status ?? ""} className="input !w-auto"><option value="">All statuses</option>{Object.keys(EntryStatus).map((s) => <option key={s}>{s}</option>)}</select>
         <button className="btn-ghost">Filter</button>
         <span className="self-center text-gray-500">{total} entries</span>
+        <a className="btn-ghost" href={`/app/campaigns/${id}/entries/export`}>Export CSV (masked)</a>
+        {manage && <a className="btn-ghost" href={`/app/campaigns/${id}/entries/export?full=1`} title="Includes full mobile numbers and emails; logged in the audit log">Export CSV (full)</a>}
       </form>
       <div className="card divide-y overflow-x-auto">
         {rows.length === 0 && <p className="text-sm text-gray-600">No entries yet.</p>}
@@ -52,6 +57,12 @@ export default async function Entries({ params, searchParams }: { params: Promis
                   ? <><input name="reason" placeholder="Revoke reason" className="input !w-28 !py-1" /><button name="op" value="revoke" className="text-red-600">Revoke</button></>
                   : <button name="op" value="restore" className="text-green-700">Restore</button>}
               </form>
+            )}
+            {manage && r.name !== "[erased]" && (
+              <span className="flex items-center gap-2">
+                <ExportDataButton entryId={r.id} action={exportEntryDataAction} />
+                <form action={eraseEntryAction}><input type="hidden" name="campaignId" value={id} /><input type="hidden" name="entryId" value={r.id} /><button className="text-red-600" title="Erase this person's personal data (DPDP request)">Erase data</button></form>
+              </span>
             )}
             {manage && r.status !== "APPROVED" && (
               <form action={reviewEntryAction}><input type="hidden" name="campaignId" value={id} /><input type="hidden" name="entryId" value={r.id} /><button name="decision" value="APPROVED" className="text-green-700">Approve</button></form>

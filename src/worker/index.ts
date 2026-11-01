@@ -6,6 +6,7 @@ import { withPlatform } from "../server/db";
 import { env } from "../server/env";
 import { sendCertificateEmail, sendDailyDigests, sendRejectionEmail, notifyNewEntry } from "../server/email/notifications";
 import { bullConnection, EMAIL_QUEUE, emailQueue, enqueueEmail, enqueueRender, RENDER_QUEUE, type EmailJob, type RenderJob } from "../server/queue";
+import { purgeExpired } from "../server/privacy";
 import { markFailed, renderCertificate } from "./render";
 
 const CONCURRENCY = Number(process.env.RENDER_CONCURRENCY ?? 2);
@@ -47,6 +48,7 @@ const emailWorker = new Worker<EmailJob>(
       d.kind === "certificate" ? await sendCertificateEmail(d.id, d.force)
       : d.kind === "rejected" ? await sendRejectionEmail(d.id)
       : d.kind === "entry-notify" ? await notifyNewEntry(d.id)
+      : d.kind === "retention" ? await purgeExpired()
       : await sendDailyDigests();
     console.log(JSON.stringify({ level: "info", msg: "email job", kind: d.kind, id: "id" in d ? d.id : undefined, result }));
   },
@@ -54,6 +56,8 @@ const emailWorker = new Worker<EmailJob>(
 );
 // 09:00 IST every day
 emailQueue().upsertJobScheduler("daily-digest", { pattern: "30 3 * * *" }, { name: "digest", data: { kind: "digest" } }).catch((e) => console.error("digest schedule failed", e));
+
+emailQueue().upsertJobScheduler("retention", { pattern: "0 21 * * *" }, { name: "retention", data: { kind: "retention" } }).catch((e) => console.error("retention schedule failed", e));
 
 // Safety net: re-queue certificates stuck QUEUED/RENDERING (Redis outage at enqueue time, worker crash).
 async function sweep() {

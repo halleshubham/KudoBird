@@ -88,6 +88,7 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
                 <Field name={`rejIntro_${l}`} label={`Rejection email text (${l.toUpperCase()})`} defaultValue={s.email.rejectedIntro[l] ?? ""} />
               </div>
             ))}
+            <Field name="retentionDays" label="Erase contributors' personal data after (days, empty = keep)" type="number" min={30} max={3650} defaultValue={s.retentionDays ?? ""} />
             <Field name="shareText" label="Share text ({{campaign}}, {{url}}, {{name}})" defaultValue={s.shareText} />
             <Field name="hashtags" label="Hashtags (space separated, no #)" defaultValue={s.hashtags.join(" ")} />
           </ActionForm>

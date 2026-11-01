@@ -48,7 +48,7 @@ export default async function CertificatePage({ params, searchParams }: { params
       {ready ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={`/c/${c.publicId}/img/square?v=${c.outputs.square.hash}`} alt={`${c.name} · ${c.number}`} width={1080} height={1080} className="w-full rounded-lg border bg-white shadow-sm" />
-      ) : <RenderProgress publicId={c.publicId} failed={c.renderStatus === "FAILED"} labels={{ working: t.working, failed: t.failed }} />}
+      ) : revoked ? null : <RenderProgress publicId={c.publicId} failed={c.renderStatus === "FAILED"} labels={{ working: t.working, failed: t.failed }} />}
       <section aria-label={t.verify} className="card space-y-1 text-sm">
         <p><span className="text-gray-500">{t.issuedTo}:</span> <strong>{c.name}</strong></p>
         <p><span className="text-gray-500">{t.number}:</span> {c.number}</p>

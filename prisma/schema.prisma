@@ -184,6 +184,7 @@ model Organization {
   primaryColor   String?
   customDomain   String?   @unique
   // Plan-gated custom sender (feature "customEmailSender"); verified through Resend
+  logoAssetId    String?   @db.Uuid
   emailFrom           String?
   emailDomainVerified Boolean @default(false)
   createdAt      DateTime  @default(now())

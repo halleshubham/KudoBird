@@ -73,6 +73,7 @@ export async function updateSettingsAction(_: State, fd: FormData): Promise<Stat
         rejectedSubject: current.email.rejectedSubject,
         rejectedIntro: Object.fromEntries(LOCALES.map((l) => [l, String(fd.get(`rejIntro_${l}`) ?? "") || undefined])),
       },
+      retentionDays: Number(fd.get("retentionDays")) > 0 ? Number(fd.get("retentionDays")) : null,
       shareText: String(fd.get("shareText") ?? current.shareText),
       hashtags: String(fd.get("hashtags") ?? "").split(/[\s,#]+/).filter(Boolean),
     });

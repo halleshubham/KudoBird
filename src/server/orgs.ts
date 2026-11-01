@@ -67,9 +67,13 @@ export async function resolveOrgContext(userId: string, orgId: string, impersona
 
 const actor = (ctx: OrgContext) => ({ actorId: ctx.userId, impersonatorId: ctx.impersonatorId });
 
-export async function updateOrganization(ctx: OrgContext, data: { name?: string; primaryColor?: string | null }) {
+export async function updateOrganization(ctx: OrgContext, data: { name?: string; primaryColor?: string | null; logoAssetId?: string | null }) {
   assertCan(ctx.role, "org.update");
   return withTenant(ctx, async (tx) => {
+    if (data.logoAssetId) {
+      const a = await tx.asset.findFirst({ where: { id: data.logoAssetId, orgId: ctx.orgId, kind: "LOGO" } });
+      if (!a) throw new OrgError("NOT_FOUND", "Logo not found");
+    }
     const org = await tx.organization.update({ where: { id: ctx.orgId }, data });
     await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "org.updated", entity: "Organization", entityId: ctx.orgId, meta: data });
     return org;
@@ -186,4 +190,25 @@ export async function removeMember(ctx: OrgContext, memberUserId: string) {
 export async function listAuditLog(ctx: OrgContext, take = 100) {
   assertCan(ctx.role, "audit.view");
   return withTenant(ctx, (tx) => tx.auditLog.findMany({ where: { orgId: ctx.orgId }, orderBy: { createdAt: "desc" }, take }));
+}
+
+export interface AuditQuery { action?: string; actorId?: string; page?: number; pageSize?: number }
+
+/** Paged, filterable audit log with actor emails resolved. Visible to owners and admins only. */
+export async function queryAuditLog(ctx: OrgContext, q: AuditQuery = {}) {
+  assertCan(ctx.role, "audit.view");
+  const pageSize = Math.min(q.pageSize ?? 50, 200);
+  const where: Prisma.AuditLogWhereInput = { orgId: ctx.orgId, ...(q.action ? { action: { startsWith: q.action } } : {}), ...(q.actorId ? { actorId: q.actorId } : {}) };
+  const { rows, total, actions } = await withTenant(ctx, async (tx) => {
+    const [rows, total, actions] = await Promise.all([
+      tx.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((q.page ?? 1) - 1) * pageSize, take: pageSize }),
+      tx.auditLog.count({ where }),
+      tx.auditLog.groupBy({ by: ["action"], where: { orgId: ctx.orgId }, _count: true }),
+    ]);
+    return { rows, total, actions: actions.map((a) => a.action).sort() };
+  });
+  const ids = [...new Set(rows.flatMap((r) => [r.actorId, r.impersonatorId]).filter(Boolean) as string[])];
+  const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true } }) : [];
+  const email = (id: string | null) => (id ? users.find((u) => u.id === id)?.email ?? "unknown" : null);
+  return { total, pageSize, actions, rows: rows.map((r) => ({ ...r, actorEmail: email(r.actorId), impersonatorEmail: email(r.impersonatorId) })) };
 }

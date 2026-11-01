@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { env } from "./env";
@@ -29,7 +30,7 @@ export async function enqueueRender(certificateId: string, force = false): Promi
   try {
     // A unique job id per request when forcing, so a regenerate is not swallowed by a finished job.
     // (BullMQ forbids ":" in custom job ids.)
-    await renderQueue().add("render", { certificateId, force }, { jobId: force ? `${certificateId}-f${Date.now()}` : certificateId });
+    await renderQueue().add("render", { certificateId, force }, { jobId: force ? `${certificateId}-f${randomUUID().slice(0, 8)}` : certificateId });
   } catch (e) {
     console.error("[queue] enqueue failed; sweeper will retry", e instanceof Error ? e.message : e);
   }
@@ -39,7 +40,8 @@ export type EmailJob =
   | { kind: "certificate"; id: string; force?: boolean } // id = certificate id
   | { kind: "rejected"; id: string } // id = entry id
   | { kind: "entry-notify"; id: string } // id = entry id
-  | { kind: "digest" };
+  | { kind: "digest" }
+  | { kind: "retention" };
 
 let emailQ: Queue<EmailJob> | undefined;
 export function emailQueue(): Queue<EmailJob> {
@@ -53,7 +55,7 @@ export function emailQueue(): Queue<EmailJob> {
 export async function enqueueEmail(job: EmailJob): Promise<void> {
   try {
     // BullMQ forbids ":" in custom job ids
-    const id = job.kind === "digest" ? undefined : `${job.kind}-${job.id}${"force" in job && job.force ? `-f${Date.now()}` : ""}`;
+    const id = job.kind === "digest" || job.kind === "retention" ? undefined : `${job.kind}-${job.id}${"force" in job && job.force ? `-f${randomUUID().slice(0, 8)}` : ""}`;
     await emailQueue().add(job.kind, job, { jobId: id });
   } catch (e) {
     console.error("[queue] email enqueue failed", e instanceof Error ? e.message : e);
