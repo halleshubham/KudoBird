@@ -41,7 +41,7 @@ Without `RESEND_API_KEY`, emails are printed to the server console (verification
 | `GOOGLE_CLIENT_ID/SECRET` | Optional Google sign-in (redirect URI: `$APP_URL/auth/google/callback`) |
 | `RESEND_API_KEY`, `EMAIL_FROM`, `RESEND_WEBHOOK_SECRET` | Email delivery and webhook verification |
 | `SENTRY_DSN` | Optional error monitoring |
-| `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile bot check on the public form. Unset = bot check is skipped (dev). **Set both in production.** |
+| `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` | Cloudflare Turnstile bot check on the public form. Unset = bot check is skipped (dev). **Set both in production.** |
 | `STORAGE_DRIVER` | `local` (default, `STORAGE_DIR`) or `s3` (`S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`; works with Cloudflare R2) |
 | `FONT_CACHE_DIR` | Where downloaded Google fonts are cached (default `./storage/fonts`) |
 

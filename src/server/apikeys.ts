@@ -1,8 +1,8 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { audit } from "./audit";
+import { actorOf, audit } from "./audit";
 import { hashToken } from "./crypto";
 import { withPlatform, withTenant } from "./db";
-import { assertFeature, EntitlementError } from "./entitlements";
+import { assertFeature, effectiveEntitlements } from "./entitlements";
 import { OrgError, type OrgContext } from "./orgs";
 import { assertCan } from "./permissions";
 
@@ -38,7 +38,7 @@ export async function createApiKey(ctx: OrgContext, input: { name: string; scope
     await assertFeature(tx, ctx.orgId, "api");
     if ((await tx.apiKey.count({ where: { orgId: ctx.orgId, revokedAt: null } })) >= MAX_KEYS) throw new OrgError("LIMIT", `An organisation can have at most ${MAX_KEYS} active API keys`);
     const k = await tx.apiKey.create({ data: { orgId: ctx.orgId, name, prefix, keyHash: hashToken(key), scopes, createdById: ctx.userId, expiresAt } });
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "apikey.created", entity: "ApiKey", entityId: k.id, meta: { name, prefix, scopes } });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "apikey.created", entity: "ApiKey", entityId: k.id, meta: { name, prefix, scopes } });
     return k;
   });
   return { key, record: publicKey(row) }; // the full key is returned exactly once
@@ -59,7 +59,7 @@ export async function revokeApiKey(ctx: OrgContext, id: string) {
     if (!k) throw new OrgError("NOT_FOUND", "API key not found");
     if (!k.revokedAt) {
       await tx.apiKey.update({ where: { id }, data: { revokedAt: new Date() } });
-      await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "apikey.revoked", entity: "ApiKey", entityId: id, meta: { name: k.name, prefix: k.prefix } });
+      await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "apikey.revoked", entity: "ApiKey", entityId: id, meta: { name: k.name, prefix: k.prefix } });
     }
   });
 }
@@ -74,17 +74,13 @@ export async function authenticateApiKey(authorization: string | null | undefine
   const parsed = KEY_FORMAT.exec(key);
   const bad = new ApiAuthError(401, "invalid_api_key", "The API key is invalid, expired or revoked");
   if (!parsed) throw bad;
-  const row = await withPlatform((tx) => tx.apiKey.findUnique({ where: { prefix: parsed[1] }, include: { org: { select: { status: true, deletedAt: true } } } }));
+  const row = await withPlatform((tx) => tx.apiKey.findUnique({ where: { prefix: parsed[1] }, include: { org: { select: { status: true, deletedAt: true, limitOverrides: true, plan: { select: { limits: true, features: true } } } } } }));
   const given = Buffer.from(hashToken(key)), expected = Buffer.from(row?.keyHash ?? "0".repeat(64));
   const ok = given.length === expected.length && timingSafeEqual(given, expected); // constant time, also when the key does not exist
   if (!row || !ok || row.revokedAt || (row.expiresAt && row.expiresAt < new Date())) throw bad;
   if (row.org.deletedAt || row.org.status !== "ACTIVE") throw new ApiAuthError(403, "organisation_inactive", "This organisation is suspended");
-  try {
-    await withPlatform((tx) => assertFeature(tx, row.orgId, "api"));
-  } catch (e) {
-    if (e instanceof EntitlementError) throw new ApiAuthError(403, "api_not_available", "API access is not included in this organisation's plan");
-    throw e;
-  }
+  // Plan and overrides came with the key lookup (one query per request instead of three).
+  if (!effectiveEntitlements(row.org.plan, row.org.limitOverrides).features.api) throw new ApiAuthError(403, "api_not_available", "API access is not included in this organisation's plan");
   if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000) {
     await withPlatform((tx) => tx.apiKey.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }));
   }

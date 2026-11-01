@@ -13,10 +13,14 @@ import { markFailed, renderCertificate } from "./render";
 const CONCURRENCY = Number(process.env.RENDER_CONCURRENCY ?? 2);
 let browser: Browser | null = null;
 
-/** One long-lived browser shared by all jobs (each job gets its own isolated context). Relaunched if it dies. */
+/**
+ * One long-lived browser shared by all jobs (each job gets its own isolated context). Relaunched if it dies.
+ * CHROMIUM_NO_SANDBOX=1 is set in the container image: Docker's default seccomp profile blocks Chromium's sandbox, and the
+ * only content rendered is HTML we generate ourselves with escaped values, in a context with all network access refused.
+ */
 async function getBrowser(): Promise<Browser> {
   if (browser?.isConnected()) return browser;
-  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ["--font-render-hinting=none", "--disable-dev-shm-usage"] });
+  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ["--font-render-hinting=none", "--disable-dev-shm-usage", ...(process.env.CHROMIUM_NO_SANDBOX === "1" ? ["--no-sandbox"] : [])] });
   browser.on("disconnected", () => { browser = null; });
   return browser;
 }

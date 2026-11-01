@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { queryAuditLog } from "@/server/orgs";
 import { requireOrg } from "@/server/session";
-import { listSupportAccess } from "@/server/admin/impersonation";
+import { listSupportAccess } from "@/server/admin/support-session";
 
 export default async function Audit({ searchParams }: { searchParams: Promise<{ action?: string; page?: string }> }) {
   const { ctx } = await requireOrg("audit.view");

@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { pageArgs } from "../paginate";
 import { sendAuthLink } from "../auth";
 import { prisma, withPlatform } from "../db";
 import { assertSuperAdmin, AdminError, platformAudit } from "./guard";
@@ -9,7 +10,7 @@ export async function listUsers(adminId: string, q: { q?: string; page?: number 
   const where: Prisma.UserWhereInput = q.q ? { OR: [{ email: { contains: q.q, mode: "insensitive" } }, { name: { contains: q.q, mode: "insensitive" } }] } : {};
   return withPlatform(async (tx) => {
     const [users, total] = await Promise.all([
-      tx.user.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((q.page ?? 1) - 1) * pageSize, take: pageSize, include: { memberships: { include: { org: { select: { id: true, name: true, status: true, deletedAt: true } } } } } }),
+      tx.user.findMany({ where, orderBy: { createdAt: "desc" }, ...pageArgs(q.page, pageSize), include: { memberships: { include: { org: { select: { id: true, name: true, status: true, deletedAt: true } } } } } }),
       tx.user.count({ where }),
     ]);
     return {

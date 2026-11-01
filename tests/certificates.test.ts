@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/server/queue", () => ({ enqueueRender: vi.fn(async () => {}), enqueueEmail: vi.fn(async () => {}), RENDER_QUEUE: "render", EMAIL_QUEUE: "email" }));
+vi.mock("@/server/queue", () => ({ enqueueRender: vi.fn(async () => {}), enqueueRenders: vi.fn(async () => {}), enqueueEmail: vi.fn(async () => {}), RENDER_QUEUE: "render", EMAIL_QUEUE: "email" }));
 
 import { prisma, withPlatform, withTenant } from "@/server/db";
 import { createCampaign, getCampaign, getTemplateDesign, reviewEntry, saveTemplateDesign, submitEntry, updateCampaign } from "@/server/campaigns/service";
@@ -47,11 +47,12 @@ describe("certificate issuing", () => {
     expect(enqueueRender).toHaveBeenCalledWith(cert.id);
   });
   it("snapshot contains only certificate fields: never mobile, email or hidden custom fields", async () => {
-    const r = await submit({ village: "Nashik", secret_note: "hidden-value" });
+    const phone = mobile(); // assert on the real number, not a short digit prefix that random names or ids can contain by chance
+    const r = await submit({ village: "Nashik", secret_note: "hidden-value", mobile: phone });
     const cert = await withPlatform((tx) => tx.certificate.findFirstOrThrow({ where: { entryId: (r as { entryId: string }).entryId } }));
     const json = JSON.stringify(cert.renderData);
     expect(cert.renderData).toMatchObject({ name: "Priya Kulkarni", village: "Nashik", certificate_no: cert.number });
-    for (const secret of ["priya.private", "example.com", "hidden-value", "98"]) expect(json).not.toContain(secret);
+    for (const secret of ["priya.private", "example.com", "hidden-value", phone]) expect(json).not.toContain(secret);
     const pub = JSON.stringify(await getPublicCertificate(cert.publicId));
     for (const secret of ["priya.private", "example.com", "mobile", "email", "Enc", "Hash"]) expect(pub).not.toContain(secret);
   });

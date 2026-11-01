@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { pageArgs } from "./paginate";
 import { Prisma, type Role } from "@prisma/client";
 import * as React from "react";
-import { audit } from "./audit";
+import { actorOf, audit } from "./audit";
 import { hashToken, newToken } from "./crypto";
 import { prisma, withPlatform, withTenant, withUser, type TenantContext } from "./db";
 import { sendEmail } from "./email";
@@ -9,7 +10,8 @@ import { ActionEmail } from "./email/templates";
 import { assertWithinLimit, defaultPlanFor } from "./entitlements";
 import { env } from "./env";
 import { assertCan, canManageRole, ForbiddenError } from "./permissions";
-import { slugify } from "./slug";
+import { OrgError } from "./errors";
+import { slugify, withUniqueSlug } from "./slug";
 import { normalizeEmail } from "./auth";
 
 export interface OrgContext extends TenantContext {
@@ -19,34 +21,23 @@ export interface OrgContext extends TenantContext {
   impersonatorId?: string | null;
 }
 
-export class OrgError extends Error {
-  constructor(public readonly code: string, message: string) {
-    super(message);
-  }
-}
+export { OrgError };
 
 /** Creates an organisation on the default plan and makes `userId` its owner. */
 export async function createOrganization(userId: string, name: string) {
   const orgId = randomUUID();
   const base = slugify(name);
   const plan = await withPlatform((tx) => defaultPlanFor(tx));
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const slug = attempt === 0 ? base : `${base}-${randomUUID().slice(0, 4)}`;
-    try {
-      // The new org id is set as the tenant context so RLS WITH CHECK accepts the inserts.
-      return await withTenant({ orgId, userId }, async (tx) => {
-        const org = await tx.organization.create({ data: { id: orgId, name: name.trim(), slug, planId: plan.id } });
-        await tx.membership.create({ data: { orgId, userId, role: "OWNER" } });
-        await tx.subscription.create({ data: { orgId, planId: plan.id } });
-        await audit(tx, { orgId, actorId: userId, action: "org.created", entity: "Organization", entityId: orgId });
-        return org;
-      });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue; // slug taken
-      throw e;
-    }
-  }
-  throw new OrgError("SLUG_TAKEN", "Could not allocate a unique organisation address");
+  // The new org id is set as the tenant context so RLS WITH CHECK accepts the inserts.
+  return withUniqueSlug(base, "organisation", (slug) =>
+    withTenant({ orgId, userId }, async (tx) => {
+      const org = await tx.organization.create({ data: { id: orgId, name: name.trim(), slug, planId: plan.id } });
+      await tx.membership.create({ data: { orgId, userId, role: "OWNER" } });
+      await tx.subscription.create({ data: { orgId, planId: plan.id } });
+      await audit(tx, { orgId, actorId: userId, action: "org.created", entity: "Organization", entityId: orgId });
+      return org;
+    }),
+  );
 }
 
 export async function listUserOrgs(userId: string) {
@@ -65,7 +56,6 @@ export async function resolveOrgContext(userId: string, orgId: string, impersona
   });
 }
 
-const actor = (ctx: OrgContext) => ({ actorId: ctx.userId, impersonatorId: ctx.impersonatorId });
 
 export async function updateOrganization(ctx: OrgContext, data: { name?: string; primaryColor?: string | null; logoAssetId?: string | null }) {
   assertCan(ctx.role, "org.update");
@@ -75,7 +65,7 @@ export async function updateOrganization(ctx: OrgContext, data: { name?: string;
       if (!a) throw new OrgError("NOT_FOUND", "Logo not found");
     }
     const org = await tx.organization.update({ where: { id: ctx.orgId }, data });
-    await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "org.updated", entity: "Organization", entityId: ctx.orgId, meta: data });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "org.updated", entity: "Organization", entityId: ctx.orgId, meta: data });
     return org;
   });
 }
@@ -105,7 +95,7 @@ export async function inviteMember(ctx: OrgContext, emailRaw: string, role: Role
     const invite = await tx.invite.create({
       data: { orgId: ctx.orgId, email, role, tokenHash: hash, invitedById: ctx.userId, expiresAt: new Date(Date.now() + 7 * 86_400_000) },
     });
-    await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "member.invited", entity: "Invite", entityId: invite.id, meta: { email, role } });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "member.invited", entity: "Invite", entityId: invite.id, meta: { email, role } });
     const org = await tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId } });
     return { orgName: org.name };
   });
@@ -149,7 +139,7 @@ export async function revokeInvite(ctx: OrgContext, inviteId: string) {
   assertCan(ctx.role, "members.manage");
   await withTenant(ctx, async (tx) => {
     await tx.invite.deleteMany({ where: { id: inviteId, orgId: ctx.orgId } });
-    await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "invite.revoked", entity: "Invite", entityId: inviteId });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "invite.revoked", entity: "Invite", entityId: inviteId });
   });
 }
 
@@ -167,7 +157,7 @@ export async function changeMemberRole(ctx: OrgContext, memberUserId: string, ne
       throw new OrgError("LAST_OWNER", "An organisation must keep at least one owner");
     }
     const updated = await tx.membership.update({ where: { id: target.id }, data: { role: newRole } });
-    await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "member.role_changed", entity: "Membership", entityId: target.id, meta: { from: target.role, to: newRole } });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "member.role_changed", entity: "Membership", entityId: target.id, meta: { from: target.role, to: newRole } });
     return updated;
   });
 }
@@ -182,14 +172,9 @@ export async function removeMember(ctx: OrgContext, memberUserId: string) {
     if (!leaving && !canManageRole(ctx.role, target.role)) throw new ForbiddenError("members.manage_owner");
     if (target.role === "OWNER" && (await ownerCount(tx, ctx.orgId)) <= 1) throw new OrgError("LAST_OWNER", "An organisation must keep at least one owner");
     await tx.membership.delete({ where: { id: target.id } });
-    await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: leaving ? "member.left" : "member.removed", entity: "Membership", entityId: target.id });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: leaving ? "member.left" : "member.removed", entity: "Membership", entityId: target.id });
   });
   await prisma.session.updateMany({ where: { userId: memberUserId, activeOrgId: ctx.orgId }, data: { activeOrgId: null } });
-}
-
-export async function listAuditLog(ctx: OrgContext, take = 100) {
-  assertCan(ctx.role, "audit.view");
-  return withTenant(ctx, (tx) => tx.auditLog.findMany({ where: { orgId: ctx.orgId }, orderBy: { createdAt: "desc" }, take }));
 }
 
 export interface AuditQuery { action?: string; actorId?: string; page?: number; pageSize?: number }
@@ -201,7 +186,7 @@ export async function queryAuditLog(ctx: OrgContext, q: AuditQuery = {}) {
   const where: Prisma.AuditLogWhereInput = { orgId: ctx.orgId, ...(q.action ? { action: { startsWith: q.action } } : {}), ...(q.actorId ? { actorId: q.actorId } : {}) };
   const { rows, total, actions } = await withTenant(ctx, async (tx) => {
     const [rows, total, actions] = await Promise.all([
-      tx.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((q.page ?? 1) - 1) * pageSize, take: pageSize }),
+      tx.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, ...pageArgs(q.page, pageSize) }),
       tx.auditLog.count({ where }),
       tx.auditLog.groupBy({ by: ["action"], where: { orgId: ctx.orgId }, _count: true }),
     ]);
@@ -221,4 +206,25 @@ export async function queryAuditLog(ctx: OrgContext, q: AuditQuery = {}) {
 export function usableOrgs<T extends { org: { id: string; status: string } }>(all: T[], session: { activeOrgId: string | null; impersonatorId: string | null }): T[] {
   const scoped = session.impersonatorId ? all.filter((o) => o.org.id === session.activeOrgId) : all;
   return scoped.filter((o) => o.org.status === "ACTIVE");
+}
+
+// ---------------------------------------------------------------- reads and small settings used directly by pages
+
+export async function getOrganization(ctx: OrgContext) {
+  assertCan(ctx.role, "org.view");
+  return withTenant(ctx, (tx) => tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, include: { plan: true } }));
+}
+
+export async function getNotificationMode(ctx: OrgContext) {
+  assertCan(ctx.role, "org.view");
+  return withTenant(ctx, async (tx) => (await tx.membership.findUniqueOrThrow({ where: { orgId_userId: { orgId: ctx.orgId, userId: ctx.userId } } })).entryNotifications);
+}
+
+/** Each member chooses how they hear about new entries (their own setting, so any member may change it). */
+export async function setNotificationMode(ctx: OrgContext, mode: "INSTANT" | "DAILY" | "OFF") {
+  assertCan(ctx.role, "org.view");
+  await withTenant(ctx, async (tx) => {
+    await tx.membership.updateMany({ where: { orgId: ctx.orgId, userId: ctx.userId }, data: { entryNotifications: mode } });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "member.notifications_changed", entity: "Membership", meta: { mode } });
+  });
 }

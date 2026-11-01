@@ -12,7 +12,8 @@ const schema = z.object({
   EMAIL_FROM: z.string().default("KudoBird <no-reply@localhost>"),
   SENTRY_DSN: z.string().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
-  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional(),
+  /** Public site key. Read at request time (NOT NEXT_PUBLIC_*, which Next would freeze into a prebuilt image). */
+  TURNSTILE_SITE_KEY: z.string().optional(),
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   STORAGE_DIR: z.string().default("./storage/files"),
   S3_BUCKET: z.string().optional(),

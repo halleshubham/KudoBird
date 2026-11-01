@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
+import { appUrl } from "../../../server/urls";
 import { notFound } from "next/navigation";
-import { getPublicCertificate } from "@/server/certificates/public";
+import { cache } from "react";
+import { getPublicCertificate as loadPublicCertificate } from "@/server/certificates/public";
+
+// generateMetadata and the page render in the same request and need the same data: query once.
+const getPublicCertificate = cache(loadPublicCertificate);
 import { env } from "@/server/env";
 import { RenderProgress } from "./RenderProgress";
 import { ShareBar, ViewBeacon } from "./ShareBar";
@@ -16,7 +21,7 @@ const L = {
     share: "तुमचे प्रमाणपत्र शेअर करा", native: "शेअर करा…", copy: "लिंक कॉपी करा", copied: "लिंक कॉपी केली ✓", instagram: "Instagram", instagramHint: "प्रतिमा सेव्ह झाली आहे. आता Instagram उघडा आणि गॅलरीतून पोस्ट करा.", whatsapp: "WhatsApp", facebook: "Facebook", x: "X", linkedin: "LinkedIn", telegram: "Telegram" },
 } as const;
 const lbl = (l: string) => L[(l in L ? l : "en") as keyof typeof L];
-const abs = (p: string) => new URL(p, env().APP_URL).toString();
+const abs = (p: string) => appUrl(p);
 
 export async function generateMetadata({ params }: { params: Promise<{ publicId: string }> }): Promise<Metadata> {
   const c = await getPublicCertificate((await params).publicId);

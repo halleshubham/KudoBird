@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pageArgs } from "../paginate";
 import { prisma, withPlatform } from "../db";
 import { ensureFont, fontSlug, syncFontCatalogue } from "../fonts";
 import { FEATURE_KEYS, LIMIT_KEYS } from "../entitlements";
@@ -123,7 +124,7 @@ export async function listFontsAdmin(adminId: string, q: { q?: string; curatedOn
   const pageSize = 40;
   const where: Prisma.FontWhereInput = { ...(q.q ? { family: { contains: q.q, mode: "insensitive" } } : {}), ...(q.curatedOnly ? { curated: true } : {}) };
   const [rows, total, all] = await Promise.all([
-    prisma.font.findMany({ where, orderBy: [{ curated: "desc" }, { popularity: "asc" }], skip: ((q.page ?? 1) - 1) * pageSize, take: pageSize }),
+    prisma.font.findMany({ where, orderBy: [{ curated: "desc" }, { popularity: "asc" }], ...pageArgs(q.page, pageSize) }),
     prisma.font.count({ where }), prisma.font.count(),
   ]);
   return { rows, total, catalogueSize: all, pageSize };
@@ -159,7 +160,7 @@ export async function listPlatformAudit(adminId: string, q: { action?: string; p
   await assertSuperAdmin(adminId);
   const pageSize = 50;
   const where: Prisma.PlatformAuditWhereInput = q.action ? { action: { startsWith: q.action } } : {};
-  const [rows, total] = await Promise.all([prisma.platformAudit.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((q.page ?? 1) - 1) * pageSize, take: pageSize }), prisma.platformAudit.count({ where })]);
+  const [rows, total] = await Promise.all([prisma.platformAudit.findMany({ where, orderBy: { createdAt: "desc" }, ...pageArgs(q.page, pageSize) }), prisma.platformAudit.count({ where })]);
   const users = await prisma.user.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.actorId))] } }, select: { id: true, email: true } });
   return { total, pageSize, rows: rows.map((r) => ({ ...r, actorEmail: users.find((u) => u.id === r.actorId)?.email ?? "unknown" })) };
 }
@@ -170,7 +171,7 @@ export async function listAllOrgAudit(adminId: string, q: { orgId?: string; acti
   const pageSize = 50;
   const where: Prisma.AuditLogWhereInput = { ...(q.orgId ? { orgId: q.orgId } : {}), ...(q.action ? { action: { startsWith: q.action } } : {}) };
   return withPlatform(async (tx) => {
-    const [rows, total] = await Promise.all([tx.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((q.page ?? 1) - 1) * pageSize, take: pageSize, include: { org: { select: { name: true } } } }), tx.auditLog.count({ where })]);
+    const [rows, total] = await Promise.all([tx.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, ...pageArgs(q.page, pageSize), include: { org: { select: { name: true } } } }), tx.auditLog.count({ where })]);
     const ids = [...new Set(rows.flatMap((r) => [r.actorId, r.impersonatorId]).filter(Boolean) as string[])];
     const users = ids.length ? await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true } }) : [];
     const em = (id: string | null) => (id ? users.find((u) => u.id === id)?.email ?? "unknown" : null);

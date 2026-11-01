@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Role } from "@prisma/client";
 import { can, canManageRole, PERMISSIONS } from "@/server/permissions";
-import { changeMemberRole, inviteMember, listAuditLog, removeMember, updateOrganization, type OrgContext } from "@/server/orgs";
+import { changeMemberRole, inviteMember, queryAuditLog, removeMember, updateOrganization, type OrgContext } from "@/server/orgs";
 import { consoleOutbox } from "@/server/email";
 import { prisma } from "@/server/db";
 import { cleanup, makeOrg } from "./helpers";
@@ -75,8 +75,8 @@ describe("role enforcement in services", () => {
     await expect(removeMember(c("OWNER"), T.owner.id)).rejects.toThrow(/at least one owner/);
   });
   it("audit log is visible to admin/owner only and records the actions", async () => {
-    await expect(listAuditLog(c("EDITOR"))).rejects.toThrow(/Forbidden/);
-    const log = await listAuditLog(c("ADMIN"));
+    await expect(queryAuditLog(c("EDITOR"))).rejects.toThrow(/Forbidden/);
+    const log = (await queryAuditLog(c("ADMIN"))).rows;
     expect(log.map((l) => l.action)).toEqual(expect.arrayContaining(["org.created", "member.invited", "org.updated"]));
   });
 });

@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { createSession, destroySession, getSession } from "./auth";
-import { stopImpersonation } from "./admin/impersonation";
+import { stopImpersonation } from "./admin/support-session";
 import { prisma } from "./db";
 import { listUserOrgs, resolveOrgContext, usableOrgs, type OrgContext } from "./orgs";
 import { can, type Permission } from "./permissions";

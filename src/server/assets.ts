@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AssetKind } from "@prisma/client";
-import { audit } from "./audit";
+import { actorOf, audit } from "./audit";
 import { withTenant } from "./db";
 import { assertWithinLimit, recordUsage } from "./entitlements";
 import { OrgError, type OrgContext } from "./orgs";
@@ -29,7 +29,7 @@ export async function uploadAsset(ctx: OrgContext, input: { kind: AssetKind; fil
     await assertWithinLimit(tx, ctx.orgId, "storageBytes", input.body.length); // per-org quota
     const a = await tx.asset.create({ data: { id, orgId: ctx.orgId, kind: input.kind, storageKey, mime: input.mime, bytes: input.body.length, filename: input.filename.slice(0, 120) } });
     await recordUsage(tx, ctx.orgId, "storage_bytes", input.body.length);
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "asset.uploaded", entity: "Asset", entityId: id, meta: { kind: input.kind } });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "asset.uploaded", entity: "Asset", entityId: id, meta: { kind: input.kind } });
     return a;
   });
   await getStorage().put(storageKey, input.body, input.mime);
@@ -37,6 +37,7 @@ export async function uploadAsset(ctx: OrgContext, input: { kind: AssetKind; fil
 }
 
 export async function readAsset(ctx: OrgContext, id: string) {
+  assertCan(ctx.role, "campaigns.view");
   const a = await withTenant(ctx, (tx) => tx.asset.findFirst({ where: { id, orgId: ctx.orgId } }));
   if (!a) return null;
   const body = await getStorage().get(a.storageKey);
@@ -44,5 +45,6 @@ export async function readAsset(ctx: OrgContext, id: string) {
 }
 
 export async function listAssets(ctx: OrgContext, kind: AssetKind) {
+  assertCan(ctx.role, "campaigns.view");
   return withTenant(ctx, (tx) => tx.asset.findMany({ where: { orgId: ctx.orgId, kind }, orderBy: { createdAt: "desc" } }));
 }

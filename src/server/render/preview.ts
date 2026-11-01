@@ -1,8 +1,9 @@
 import QRCode from "qrcode";
 import { withTenant } from "../db";
-import { parseSettings } from "../campaigns/schema";
+import { formatCertDate } from "../../lib/format";
 import { fontFaceCss } from "../fonts";
 import { OrgError, type OrgContext } from "../orgs";
+import { assertCan } from "../permissions";
 import { designFonts, designSchema, type Design } from "./design";
 import { renderCertificateHtml } from "./html";
 import { OUTPUT_SIZES, type OutputSize } from "./sizes";
@@ -11,6 +12,7 @@ export const SAMPLE_NAMES: Record<string, string> = { mr: "बळीराजा
 
 /** Live-preview HTML with sample data. Images/fonts are referenced by same-origin URL (cheap to update). */
 export async function buildPreviewHtml(ctx: OrgContext, input: { campaignId: string; design: unknown; size?: OutputSize }): Promise<string> {
+  assertCan(ctx.role, "campaigns.view");
   const design: Design = designSchema.parse(input.design);
   const { campaign, sigs, org } = await withTenant(ctx, async (tx) => {
     const campaign = await tx.campaign.findFirst({
@@ -21,8 +23,6 @@ export async function buildPreviewHtml(ctx: OrgContext, input: { campaignId: str
     const org = await tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId } });
     return { campaign, org, sigs: campaign.signatories.map((s) => s.signatory) };
   });
-  const settings = parseSettings(campaign.settings);
-  void settings;
   const size = OUTPUT_SIZES[input.size ?? "square"];
   const assets: Record<string, string> = {};
   for (const id of [...design.logos.assetIds, design.background.assetId].filter(Boolean) as string[]) assets[id] = `/api/assets/${id}`;
@@ -33,7 +33,7 @@ export async function buildPreviewHtml(ctx: OrgContext, input: { campaignId: str
     design,
     data: {
       name: SAMPLE_NAMES[locale] ?? SAMPLE_NAMES.en, campaign: campaign.name, org: org.name,
-      date: new Intl.DateTimeFormat(locale === "en" ? "en-IN" : locale === "hi" ? "hi-IN" : "mr-IN", { dateStyle: "long" }).format(new Date()),
+      date: formatCertDate(new Date(), locale),
       certificate_no: `${campaign.numberPrefix}-${new Date().getFullYear()}-00001`,
     },
     assets,

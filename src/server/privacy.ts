@@ -1,5 +1,6 @@
-import { audit } from "./audit";
-import { decrypt, encrypt, newToken } from "./crypto";
+import { actorOf, audit } from "./audit";
+import { encrypt, newToken } from "./crypto";
+import { revealContact } from "./pii";
 import { withPlatform, withTenant } from "./db";
 import { OrgError, type OrgContext } from "./orgs";
 import { assertCan } from "./permissions";
@@ -12,9 +13,9 @@ export async function exportEntryData(ctx: OrgContext, entryId: string) {
   return withTenant(ctx, async (tx) => {
     const e = await tx.entry.findFirst({ where: { id: entryId, orgId: ctx.orgId }, include: { certificate: true, campaign: { select: { name: true } } } });
     if (!e) throw new OrgError("NOT_FOUND", "Entry not found");
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "entry.data_exported", entity: "Entry", entityId: entryId });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "entry.data_exported", entity: "Entry", entityId: entryId });
     return {
-      campaign: e.campaign.name, name: e.name, mobile: decrypt(e.mobileEnc), email: e.emailEnc ? decrypt(e.emailEnc) : null, customFields: e.customData,
+      campaign: e.campaign.name, name: e.name, ...revealContact(e), customFields: e.customData,
       status: e.status, submittedAt: e.createdAt, consentGivenAt: e.consentAt, consentText: e.consentText, publicWallOptIn: e.wallOptIn, language: e.locale,
       certificate: e.certificate ? { number: e.certificate.number, issuedAt: e.certificate.issuedAt, status: e.certificate.status } : null,
     };
@@ -52,7 +53,7 @@ export async function eraseEntry(ctx: OrgContext, entryId: string) {
     const e = await tx.entry.findFirst({ where: { id: entryId, orgId: ctx.orgId } });
     if (!e) throw new OrgError("NOT_FOUND", "Entry not found");
     const k = await eraseEntryTx(tx, entryId, "Personal data erased on request");
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "entry.erased", entity: "Entry", entityId: entryId });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "entry.erased", entity: "Entry", entityId: entryId });
     return k;
   });
   await Promise.all(keys.map((k) => getStorage().delete(k).catch(() => {})));

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { currentPeriod, getUsage, LIMIT_KEYS, loadEntitlements } from "@/server/entitlements";
-import { withTenant } from "@/server/db";
+import { currentPeriod, LIMIT_KEYS, usageOverview } from "@/server/entitlements";
 import { getDashboard } from "@/server/dashboard";
 import { requireOrg } from "@/server/session";
 import { ActivityChart } from "./dashboard-parts/ActivityChart";
@@ -17,12 +16,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const { forbidden } = await searchParams;
   const [d, meta] = await Promise.all([
     getDashboard(ctx, 30),
-    withTenant(ctx, async (tx) => {
-      const org = await tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, include: { plan: true } });
-      const ent = await loadEntitlements(tx, ctx.orgId);
-      const usage = Object.fromEntries(await Promise.all(LIMIT_KEYS.map(async (k) => [k, await getUsage(tx, ctx.orgId, k)])));
-      return { org, usage, limits: ent.limits as Record<string, number | undefined> };
-    }),
+    usageOverview(ctx),
   ]);
   const maxShare = Math.max(1, ...d.sharesByPlatform.map((s) => s.count));
   return (

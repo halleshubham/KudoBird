@@ -1,23 +1,19 @@
 import Link from "next/link";
+import { fmtTs } from "@/lib/format";
 import { ActionButton } from "@/components/ActionButton";
 import { Field } from "@/components/ActionForm";
 import { listApiKeys } from "@/server/apikeys";
-import { assertFeature, EntitlementError } from "@/server/entitlements";
-import { withTenant } from "@/server/db";
+import { hasFeature } from "@/server/entitlements";
 import { env } from "@/server/env";
 import { listWebhookDeliveries, listWebhookEndpoints, WEBHOOK_EVENTS } from "@/server/webhooks";
 import { requireOrg } from "@/server/session";
 import { createKeyAction, createWebhookAction, deleteWebhookAction, redeliverAction, revokeKeyAction, rotateSecretAction, testWebhookAction, toggleWebhookAction } from "./actions";
 import { RevealForm } from "./RevealForm";
 
-async function has(ctx: Parameters<typeof withTenant>[0], feature: "api" | "webhooks") {
-  try { await withTenant(ctx, (tx) => assertFeature(tx, ctx.orgId, feature)); return true; } catch (e) { if (e instanceof EntitlementError) return false; throw e; }
-}
-const ts = (d: Date | null) => (d ? d.toISOString().slice(0, 16).replace("T", " ") : "never");
 
 export default async function Developers() {
   const { ctx } = await requireOrg("apikeys.manage");
-  const [apiOn, hooksOn] = await Promise.all([has(ctx, "api"), has(ctx, "webhooks")]);
+  const [apiOn, hooksOn] = await Promise.all([hasFeature(ctx, "api"), hasFeature(ctx, "webhooks")]);
   const [keys, endpoints] = await Promise.all([listApiKeys(ctx), listWebhookEndpoints(ctx)]);
   const deliveries: Record<string, Awaited<ReturnType<typeof listWebhookDeliveries>>> = Object.fromEntries(await Promise.all(endpoints.map(async (e) => [e.id, await listWebhookDeliveries(ctx, e.id, 10)])));
   return (
@@ -33,7 +29,7 @@ export default async function Developers() {
           {keys.map((k) => (
             <div key={k.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2">
               <div className="min-w-48 flex-1"><p className="font-medium">{k.name} {k.revokedAt && <span className="ml-1 rounded bg-gray-200 px-1 text-xs">revoked</span>}</p>
-                <p className="text-xs text-gray-500"><code>kb_{k.prefix}_…</code> · {k.scopes.join(", ")} · last used {ts(k.lastUsedAt)}{k.expiresAt ? ` · expires ${ts(k.expiresAt)}` : ""}</p></div>
+                <p className="text-xs text-gray-500"><code>kb_{k.prefix}_…</code> · {k.scopes.join(", ")} · last used {fmtTs(k.lastUsedAt)}{k.expiresAt ? ` · expires ${fmtTs(k.expiresAt)}` : ""}</p></div>
               {!k.revokedAt && <ActionButton action={revokeKeyAction} fields={{ id: k.id }} label="Revoke" danger confirm={`Revoke "${k.name}"? Anything using it stops working immediately.`} />}
             </div>))}
         </div>
@@ -75,7 +71,7 @@ curl -X POST ${env().APP_URL}/api/v1/campaigns/CAMPAIGN_ID/entries \\
             <details><summary className="cursor-pointer text-xs font-semibold">Recent deliveries</summary>
               <table className="mt-2 w-full text-left text-xs"><thead className="text-gray-500"><tr><th>When</th><th>Event</th><th>Status</th><th>Attempts</th><th>Result</th><th /></tr></thead>
                 <tbody>{deliveries[e.id].map((d) => (
-                  <tr key={d.id} className="border-t"><td className="py-1">{ts(d.createdAt)}</td><td>{d.event}</td>
+                  <tr key={d.id} className="border-t"><td className="py-1">{fmtTs(d.createdAt)}</td><td>{d.event}</td>
                     <td><span className={d.status === "SUCCESS" ? "text-green-700" : d.status === "PENDING" ? "text-gray-600" : "text-red-700"}>{d.status.toLowerCase()}</span></td><td>{d.attempts}</td><td className="max-w-48 truncate">{d.lastError ?? (d.lastStatusCode ? `HTTP ${d.lastStatusCode}` : "")}</td>
                     <td><ActionButton action={redeliverAction} fields={{ id: d.id }} label="Resend" /></td></tr>))}
                   {deliveries[e.id].length === 0 && <tr><td colSpan={6} className="py-2 text-gray-500">No deliveries yet.</td></tr>}</tbody></table></details>

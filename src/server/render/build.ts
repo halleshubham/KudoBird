@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
+import { appUrl } from "../urls";
 import QRCode from "qrcode";
 import { withPlatform } from "../db";
-import { env } from "../env";
+
 import { fontFaceCss } from "../fonts";
 import { getStorage } from "../storage";
 import { designFonts, designSchema, type Design } from "./design";
@@ -34,11 +35,13 @@ export async function loadCertificateSource(certificateId: string): Promise<Cert
   });
 }
 
-async function assetDataUri(orgId: string, assetId: string): Promise<string | null> {
-  const a = await withPlatform((tx) => tx.asset.findFirst({ where: { id: assetId, orgId } }));
-  if (!a) return null;
-  const body = await getStorage().get(a.storageKey);
-  return body ? `data:${a.mime};base64,${body.toString("base64")}` : null;
+/** Images are read and base64-encoded once per certificate (not once per output size). One query for all of them. */
+async function loadAssetDataUris(orgId: string, ids: string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  const rows = await withPlatform((tx) => tx.asset.findMany({ where: { id: { in: ids }, orgId } }));
+  const out: Record<string, string> = {};
+  await Promise.all(rows.map(async (a) => { const body = await getStorage().get(a.storageKey); if (body) out[a.id] = `data:${a.mime};base64,${body.toString("base64")}`; }));
+  return out;
 }
 
 /** Everything that affects the pixels. Same hash => cached output can be reused. */
@@ -46,17 +49,27 @@ export function contentHash(src: CertificateSource, key: OutputKey): string {
   return createHash("sha256").update(JSON.stringify({ v: 2, key, d: src.design, r: src.renderData, s: src.signatories, x: src.status })).digest("hex").slice(0, 16);
 }
 
+/** Work that is identical for all five outputs of a certificate. Compute once, pass to every buildCertificateHtml call. */
+export interface SharedRenderInputs { assets: Record<string, string>; qrSrc: string; fontCss: string }
+
+export async function prepareShared(src: CertificateSource): Promise<SharedRenderInputs> {
+  const ids = [...new Set([...src.design.logos.assetIds, src.design.background.assetId, ...src.signatories.map((s) => s.assetId)].filter(Boolean) as string[])];
+  const [assets, qrSrc, fontCss] = await Promise.all([
+    loadAssetDataUris(src.orgId, ids),
+    QRCode.toDataURL(appUrl(`/c/${src.publicId}`), { margin: 0, width: 360, errorCorrectionLevel: "M" }),
+    fontFaceCss(designFonts(src.design), "inline"),
+  ]);
+  return { assets, qrSrc, fontCss };
+}
+
 /** Self-contained HTML for one output: images and fonts embedded, no network needed. */
-export async function buildCertificateHtml(src: CertificateSource, key: OutputKey): Promise<{ html: string; size: { w: number; h: number } }> {
+export async function buildCertificateHtml(src: CertificateSource, key: OutputKey, shared?: SharedRenderInputs): Promise<{ html: string; size: { w: number; h: number } }> {
   const size = key === "pdf" ? A4_PDF_SIZE : OUTPUT_SIZES[key];
-  const assets: Record<string, string> = {};
-  const ids = [...src.design.logos.assetIds, src.design.background.assetId, ...src.signatories.map((s) => s.assetId)].filter(Boolean) as string[];
-  await Promise.all([...new Set(ids)].map(async (id) => { const uri = await assetDataUri(src.orgId, id); if (uri) assets[id] = uri; }));
-  const qrSrc = await QRCode.toDataURL(new URL(`/c/${src.publicId}`, env().APP_URL).toString(), { margin: 0, width: 360, errorCorrectionLevel: "M" });
+  const { assets, qrSrc, fontCss } = shared ?? (await prepareShared(src));
   const html = renderCertificateHtml({
     design: src.design, data: src.renderData, assets,
     signatories: src.signatories.map((s) => ({ name: s.name, designation: s.designation, imageSrc: s.assetId ? assets[s.assetId] ?? null : null })),
-    qrSrc, size, fontCss: await fontFaceCss(designFonts(src.design), "inline"), revoked: src.status === "REVOKED",
+    qrSrc, size, fontCss, revoked: src.status === "REVOKED",
   });
   return { html, size };
 }

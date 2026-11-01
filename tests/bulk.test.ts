@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/server/queue", () => ({ enqueueRender: vi.fn(async () => {}), enqueueEmail: vi.fn(async () => {}), RENDER_QUEUE: "render", EMAIL_QUEUE: "email" }));
+vi.mock("@/server/queue", () => ({ enqueueRender: vi.fn(async () => {}), enqueueRenders: vi.fn(async () => {}), enqueueEmail: vi.fn(async () => {}), RENDER_QUEUE: "render", EMAIL_QUEUE: "email" }));
 
 import { prisma, withPlatform, withTenant } from "@/server/db";
 import { BULK_MAX_ROWS, bulkTemplateCsv, commitBulk, previewBulk } from "@/server/bulk";
 import { createCampaign, submitEntry, updateCampaign } from "@/server/campaigns/service";
 import { csvCell, parseCsv, toCsv } from "@/server/csv";
-import { enqueueRender } from "@/server/queue";
+import { enqueueRenders } from "@/server/queue";
 import type { OrgContext } from "@/server/orgs";
 import { cleanup, makeOrg } from "./helpers";
 
@@ -121,7 +121,7 @@ describe("bulk commit", () => {
     expect(certs[0].renderData).toMatchObject({ name: "Good One", village: "Sinnar" });
     expect(certs.every((x) => x.entry.status === "APPROVED" && x.renderStatus === "QUEUED")).toBe(true);
     expect(certs[0].entry.consentText).toMatch(/attested/);
-    expect(enqueueRender).toHaveBeenCalledWith(certs[0].id);
+    expect(enqueueRenders).toHaveBeenLastCalledWith(expect.arrayContaining(r.issuedCertificateIds)); // one batched call, not one per row
   });
   it("does not email contributors unless asked; with the option, the post-render email can proceed", async () => {
     const a = await commitBulk(c("EDITOR"), campaignId, `name,mobile,email\nQuiet Person,${mob()},quiet@example.com`, { attested: true, sendEmails: false });

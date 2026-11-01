@@ -438,7 +438,9 @@ model Entry {
   certificate Certificate?
 
   @@index([campaignId, mobileHash])
+  @@index([campaignId, createdAt]) // entries list (newest first), retention purge
   @@index([orgId, createdAt])
+  @@index([orgId, status]) // pending-approval counts
 }
 
 // One certificate per entry. Holds a snapshot of everything rendered on it
@@ -470,6 +472,8 @@ model Certificate {
 
   @@unique([campaignId, number])
   @@index([orgId, issuedAt])
+  @@index([renderStatus, issuedAt]) // worker sweeper, failed-render list
+  @@index([issuedAt]) // platform-wide stats
 }
 
 // Delivery status per email. The address itself is never stored here (only a masked form).

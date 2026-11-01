@@ -7,9 +7,8 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { hashPassword } from "../src/server/crypto";
 import { prisma, withPlatform } from "../src/server/db";
-import { ensureDefaultPlan } from "../src/server/entitlements";
-import { BUNDLED_FONTS } from "../src/server/fonts/curated";
-import { PRESET_INFO, PRESETS, presetDesign } from "../src/server/render/presets";
+import { ensureReferenceData } from "../src/server/reference-data";
+import { presetDesign } from "../src/server/render/presets";
 import { getStorage } from "../src/server/storage";
 import { settingsSchema } from "../src/server/campaigns/schema";
 
@@ -26,23 +25,7 @@ async function asset(orgId: string, kind: "LOGO" | "SIGNATURE", filename: string
 }
 
 async function main() {
-  const plan = await withPlatform((tx) => ensureDefaultPlan(tx));
-
-  // bundled fonts are always listed even before `pnpm fonts:sync`
-  for (const family of BUNDLED_FONTS) {
-    await prisma.font.upsert({
-      where: { family }, update: { bundled: true, curated: true },
-      create: { family, category: family.includes("Serif") || family.includes("Tiro") ? "serif" : "sans-serif", subsets: ["devanagari", "latin"], weights: [400, 700], popularity: 1, curated: true, bundled: true },
-    });
-  }
-
-  await withPlatform(async (tx) => {
-    for (const p of PRESETS) {
-      if (await tx.template.findFirst({ where: { orgId: null, preset: p } })) continue;
-      const t = await tx.template.create({ data: { orgId: null, name: PRESET_INFO[p].name, description: PRESET_INFO[p].description, preset: p } });
-      await tx.templateVersion.create({ data: { templateId: t.id, orgId: null, version: 1, design: presetDesign(p, "en") as object } });
-    }
-  });
+  const { plan } = await ensureReferenceData();
 
   const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? "admin@kudobird.local").toLowerCase();
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin-password-123";

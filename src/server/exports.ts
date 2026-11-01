@@ -1,5 +1,5 @@
-import { audit } from "./audit";
-import { decrypt } from "./crypto";
+import { actorOf, audit } from "./audit";
+import { revealContact } from "./pii";
 import { withTenant } from "./db";
 import { OrgError, type OrgContext } from "./orgs";
 import { assertCan } from "./permissions";
@@ -19,14 +19,16 @@ export async function exportEntriesCsv(ctx: OrgContext, campaignId: string, opts
     const fields = parseFields(c.formFields);
     const entries = await tx.entry.findMany({ where: { orgId: ctx.orgId, campaignId }, orderBy: { createdAt: "asc" }, include: { certificate: { select: { number: true, status: true } } }, take: 100_000 });
     const logs = await tx.emailLog.findMany({ where: { orgId: ctx.orgId, entryId: { in: entries.map((e) => e.id) }, kind: "CERTIFICATE" }, orderBy: { createdAt: "desc" } });
+    const emailStatus = new Map<string, string>(); // newest log per entry wins (rows are newest first)
+    for (const l of logs) if (l.entryId && !emailStatus.has(l.entryId)) emailStatus.set(l.entryId, l.status.toLowerCase());
     const header = ["certificate_no", "name", "status", "certificate_status", "submitted_at", "mobile", "email", "email_delivery", ...fields.map((f) => f.key)];
     const rows = entries.map((e) => {
-      const mobile = decrypt(e.mobileEnc);
-      const email = e.emailEnc ? decrypt(e.emailEnc) : "";
+      const { mobile, email: rawEmail } = revealContact(e);
+      const email = rawEmail ?? "";
       const custom = e.customData as Record<string, string>;
-      return [e.certificate?.number ?? "", e.name, e.status.toLowerCase(), e.certificate?.status.toLowerCase() ?? "", e.createdAt, opts.full ? mobile : maskMobile(mobile), email ? (opts.full ? email : maskEmail(email)) : "", logs.find((l) => l.entryId === e.id)?.status.toLowerCase() ?? "", ...fields.map((f) => custom[f.key] ?? "")];
+      return [e.certificate?.number ?? "", e.name, e.status.toLowerCase(), e.certificate?.status.toLowerCase() ?? "", e.createdAt, opts.full ? mobile : maskMobile(mobile), email ? (opts.full ? email : maskEmail(email)) : "", emailStatus.get(e.id) ?? "", ...fields.map((f) => custom[f.key] ?? "")];
     });
-    if (opts.full) await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "entries.exported_full", entity: "Campaign", entityId: campaignId, meta: { rows: rows.length } });
+    if (opts.full) await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "entries.exported_full", entity: "Campaign", entityId: campaignId, meta: { rows: rows.length } });
     return { csv: toCsv([header, ...rows]), filename: `${c.slug}-entries${opts.full ? "" : "-masked"}.csv` };
   });
 }

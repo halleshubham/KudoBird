@@ -1,22 +1,15 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { toActionState } from "@/app/_lib/action-errors";
 import { z } from "zod";
 import { createApiKey, revokeApiKey } from "@/server/apikeys";
-import { EntitlementError } from "@/server/entitlements";
-import { OrgError } from "@/server/orgs";
-import { ForbiddenError } from "@/server/permissions";
+
 import { createWebhookEndpoint, deleteWebhookEndpoint, redeliverWebhook, rotateWebhookSecret, sendTestWebhook, updateWebhookEndpoint } from "@/server/webhooks";
 import { requireOrg } from "@/server/session";
 
 export type Reveal = { label: string; value: string };
 export type DevState = { error?: string; info?: string; reveal?: Reveal } | undefined;
-const fail = (e: unknown): DevState => {
-  if (e instanceof ForbiddenError) return { error: "You do not have permission to do that" };
-  if (e instanceof OrgError || e instanceof EntitlementError) return { error: e.message };
-  if (e instanceof z.ZodError) return { error: e.issues[0]?.message ?? "Invalid input" };
-  console.error(e);
-  return { error: "Something went wrong" };
-};
+const fail = (e: unknown): DevState => toActionState(e);
 const done = (info: string, reveal?: Reveal): DevState => { revalidatePath("/app/developers"); return { info, reveal }; };
 
 export async function createKeyAction(_: DevState, fd: FormData): Promise<DevState> {

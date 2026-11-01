@@ -1,15 +1,14 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+
 import dns from "node:dns";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import type { Prisma } from "@prisma/client";
-import * as React from "react";
-import { audit } from "./audit";
+import { actorOf, audit } from "./audit";
 import { decrypt, encrypt } from "./crypto";
 import { withPlatform, withTenant, type Tx } from "./db";
-import { deliver } from "./email/notifications";
-import { ActionEmail } from "./email/templates";
+
 import { assertFeature } from "./entitlements";
 import { env } from "./env";
 import { OrgError, type OrgContext } from "./orgs";
@@ -25,6 +24,7 @@ const BACKOFF_MIN = [1, 5, 30, 120, 360, 1440];
 const AUTO_DISABLE_AFTER = 20;
 const TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 16 * 1024;
+const DELIVERY_CONCURRENCY = 5;
 
 // ------------------------------------------------------------------ SSRF protection
 
@@ -112,7 +112,7 @@ export async function createWebhookEndpoint(ctx: OrgContext, input: { url: strin
     await assertFeature(tx, ctx.orgId, "webhooks");
     if ((await tx.webhookEndpoint.count({ where: { orgId: ctx.orgId } })) >= MAX_ENDPOINTS) throw new OrgError("LIMIT", `At most ${MAX_ENDPOINTS} webhook endpoints per organisation`);
     const e = await tx.webhookEndpoint.create({ data: { orgId: ctx.orgId, url, events, description: input.description?.slice(0, 120) || null, includePii: !!input.includePii, secretEnc: encrypt(secret) } });
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "webhook.created", entity: "WebhookEndpoint", entityId: e.id, meta: { url, events, includePii: !!input.includePii } });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "webhook.created", entity: "WebhookEndpoint", entityId: e.id, meta: { url, events, includePii: !!input.includePii } });
     return e;
   });
   return { secret, endpoint: publicEndpoint(row) }; // the signing secret is shown once
@@ -135,7 +135,7 @@ export async function updateWebhookEndpoint(ctx: OrgContext, id: string, patch: 
     const e = await tx.webhookEndpoint.findFirst({ where: { id, orgId: ctx.orgId } });
     if (!e) throw new OrgError("NOT_FOUND", "Webhook not found");
     await tx.webhookEndpoint.update({ where: { id }, data });
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "webhook.updated", entity: "WebhookEndpoint", entityId: id, meta: { changed: Object.keys(data) } });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "webhook.updated", entity: "WebhookEndpoint", entityId: id, meta: { changed: Object.keys(data) } });
   });
 }
 
@@ -145,7 +145,7 @@ export async function rotateWebhookSecret(ctx: OrgContext, id: string) {
   await withTenant(ctx, async (tx) => {
     const r = await tx.webhookEndpoint.updateMany({ where: { id, orgId: ctx.orgId }, data: { secretEnc: encrypt(secret) } });
     if (!r.count) throw new OrgError("NOT_FOUND", "Webhook not found");
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "webhook.secret_rotated", entity: "WebhookEndpoint", entityId: id });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "webhook.secret_rotated", entity: "WebhookEndpoint", entityId: id });
   });
   return { secret };
 }
@@ -155,7 +155,7 @@ export async function deleteWebhookEndpoint(ctx: OrgContext, id: string) {
   await withTenant(ctx, async (tx) => {
     const r = await tx.webhookEndpoint.deleteMany({ where: { id, orgId: ctx.orgId } });
     if (!r.count) throw new OrgError("NOT_FOUND", "Webhook not found");
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "webhook.deleted", entity: "WebhookEndpoint", entityId: id });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "webhook.deleted", entity: "WebhookEndpoint", entityId: id });
   });
 }
 
@@ -194,10 +194,8 @@ export async function queueWebhookEventTx(tx: Tx, orgId: string, event: Exclude<
   const endpoints = await tx.webhookEndpoint.findMany({ where: { orgId, active: true, events: { has: event } } });
   if (endpoints.length === 0) return 0;
   const cache = new Map<boolean, Record<string, unknown>>();
-  for (const ep of endpoints) {
-    if (!cache.has(ep.includePii)) cache.set(ep.includePii, await build(ep.includePii));
-    await tx.webhookDelivery.create({ data: { orgId, endpointId: ep.id, event, payload: envelope(event, cache.get(ep.includePii) ?? {}) } });
-  }
+  for (const ep of endpoints) if (!cache.has(ep.includePii)) cache.set(ep.includePii, await build(ep.includePii));
+  await tx.webhookDelivery.createMany({ data: endpoints.map((ep) => ({ orgId, endpointId: ep.id, event, payload: envelope(event, cache.get(ep.includePii) ?? {}) })) });
   return endpoints.length;
 }
 
@@ -264,18 +262,9 @@ export async function attemptDelivery(deliveryId: string): Promise<"SUCCESS" | "
     }
     return null;
   });
-  if (disabled) await alertOwners(d.orgId, disabled.url).catch((e) => console.error("[webhooks] alert failed", e));
+  // Loaded lazily: issuing a certificate (which queues webhooks) must not drag the email stack into its dependencies.
+  if (disabled) await import("./email/webhook-alerts").then((m) => m.alertWebhookDisabled(d.orgId, disabled.url, AUTO_DISABLE_AFTER)).catch((e) => console.error("[webhooks] alert failed", e));
   return dead ? "DEAD" : "FAILED";
-}
-
-async function alertOwners(orgId: string, url: string) {
-  const owners = await withPlatform((tx) => tx.membership.findMany({ where: { orgId, role: { in: ["OWNER", "ADMIN"] } }, include: { user: true } }));
-  for (const o of owners) {
-    await deliver({
-      orgId, kind: "WEBHOOK_ALERT", to: o.user.email, contributor: false, subject: "A webhook endpoint was switched off",
-      react: React.createElement(ActionEmail, { preview: "Webhook switched off", heading: "A webhook endpoint was switched off", body: `${url} failed ${AUTO_DISABLE_AFTER} deliveries in a row, so KudoBird stopped sending to it. Fix the receiver, then re-enable it under Developers.`, actionLabel: "Open Developers", actionUrl: new URL("/app/developers", env().APP_URL).toString() }),
-    });
-  }
 }
 
 /**
@@ -285,11 +274,15 @@ async function alertOwners(orgId: string, url: string) {
 export async function processDueDeliveries(limit = 50): Promise<number> {
   const due = await withPlatform((tx) => tx.webhookDelivery.findMany({ where: { status: { in: ["PENDING", "FAILED"] }, nextAttemptAt: { lte: new Date() } }, orderBy: { nextAttemptAt: "asc" }, take: limit, select: { id: true, nextAttemptAt: true } }));
   let done = 0;
-  for (const row of due) {
-    const claimed = await withPlatform((tx) => tx.webhookDelivery.updateMany({ where: { id: row.id, nextAttemptAt: row.nextAttemptAt, status: { in: ["PENDING", "FAILED"] } }, data: { nextAttemptAt: new Date(Date.now() + 2 * 60_000) } }));
-    if (claimed.count !== 1) continue; // another worker got it
-    await attemptDelivery(row.id);
-    done++;
-  }
+  const pending = [...due];
+  // A few deliveries in flight at once, so one receiver that takes the full 10 s timeout cannot stall everyone else's events.
+  await Promise.all(Array.from({ length: Math.min(DELIVERY_CONCURRENCY, pending.length) }, async () => {
+    for (let row = pending.shift(); row; row = pending.shift()) {
+      const claimed = await withPlatform((tx) => tx.webhookDelivery.updateMany({ where: { id: row.id, nextAttemptAt: row.nextAttemptAt, status: { in: ["PENDING", "FAILED"] } }, data: { nextAttemptAt: new Date(Date.now() + 2 * 60_000) } }));
+      if (claimed.count !== 1) continue; // another worker got it
+      await attemptDelivery(row.id);
+      done++;
+    }
+  }));
   return done;
 }

@@ -51,6 +51,16 @@ export function emailQueue(): Queue<EmailJob> {
   }));
 }
 
+/** Queue many renders with one Redis round trip. Never throws (the worker sweeper picks up anything missed). */
+export async function enqueueRenders(certificateIds: string[]): Promise<void> {
+  if (certificateIds.length === 0) return;
+  try {
+    await renderQueue().addBulk(certificateIds.map((id) => ({ name: "render", data: { certificateId: id, force: false }, opts: { jobId: id } })));
+  } catch (e) {
+    console.error("[queue] bulk enqueue failed; sweeper will retry", e instanceof Error ? e.message : e);
+  }
+}
+
 /** Never throws; contributor emails are re-discovered by the worker's sweeper if the queue was unavailable. */
 export async function enqueueEmail(job: EmailJob): Promise<void> {
   try {

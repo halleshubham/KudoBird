@@ -7,6 +7,7 @@ import { withTenant } from "../db";
 import { EntitlementError } from "../entitlements";
 import { OrgError, type OrgContext } from "../orgs";
 import { ForbiddenError } from "../permissions";
+import { paginate } from "../paginate";
 import { rateLimit } from "../security/ratelimit";
 
 export const RATE_LIMIT_PER_MINUTE = 300;
@@ -74,8 +75,7 @@ export function api<P = Record<string, string>>(scope: ApiScope, fn: (c: ApiCall
 
 /** `page` / `per_page` query parsing with sane bounds. */
 export function pageParams(q: URLSearchParams) {
-  const page = Math.max(1, Math.floor(Number(q.get("page"))) || 1);
-  const perPage = Math.min(100, Math.max(1, Math.floor(Number(q.get("per_page"))) || 25));
-  return { page, perPage };
+  const { page, pageSize } = paginate(q.get("page"), Number(q.get("per_page")) || 25);
+  return { page, perPage: pageSize };
 }
 export const pagination = (page: number, perPage: number, total: number) => ({ page, per_page: perPage, total, total_pages: Math.max(1, Math.ceil(total / perPage)) });

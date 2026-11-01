@@ -1,5 +1,6 @@
-import type { Plan } from "@prisma/client";
-import { prisma, type Tx } from "./db";
+import type { Plan, Role } from "@prisma/client";
+import { prisma, withTenant, type TenantContext, type Tx } from "./db";
+import { assertCan } from "./permissions";
 
 /**
  * Central entitlement service. EVERY limited action in the app asks this module
@@ -126,4 +127,24 @@ export async function defaultPlanFor(tx: Tx): Promise<Plan> {
   const key = (row?.value as { defaultPlanKey?: string } | undefined)?.defaultPlanKey;
   const chosen = key ? await tx.plan.findFirst({ where: { key, active: true } }) : null;
   return chosen ?? (await tx.plan.findFirst({ where: { isDefault: true, active: true } })) ?? ensureDefaultPlan(tx);
+}
+
+/** The caller's organisation and role (a subset of OrgContext, which lives in orgs.ts and would make an import cycle). */
+type RoleContext = TenantContext & { role: Role };
+
+/** Plan, limits and this period's usage in one transaction, for dashboards. */
+export async function usageOverview(ctx: RoleContext) {
+  assertCan(ctx.role, "stats.view");
+  return withTenant(ctx, async (tx) => {
+    const org = await tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, include: { plan: true } });
+    const ent = effectiveEntitlements(org.plan, org.limitOverrides);
+    const usage = Object.fromEntries(await Promise.all(LIMIT_KEYS.map(async (k) => [k, await getUsage(tx, ctx.orgId, k)]))) as Record<LimitKey, number>;
+    return { org, usage, limits: ent.limits as Record<string, number | undefined>, features: ent.features };
+  });
+}
+
+/** Whether the organisation's plan (plus overrides) includes a feature. */
+export async function hasFeature(ctx: RoleContext, feature: FeatureKey): Promise<boolean> {
+  assertCan(ctx.role, "org.view");
+  return withTenant(ctx, async (tx) => !!(await loadEntitlements(tx, ctx.orgId)).features[feature]);
 }

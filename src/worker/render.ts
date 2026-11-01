@@ -1,6 +1,6 @@
 import type { Browser } from "playwright";
 import { withPlatform } from "../server/db";
-import { A4_PDF_SIZE, buildCertificateHtml, contentHash, loadCertificateSource, OUTPUT_KEYS, type OutputKey } from "../server/render/build";
+import { A4_PDF_SIZE, buildCertificateHtml, contentHash, loadCertificateSource, OUTPUT_KEYS, prepareShared, type OutputKey, type SharedRenderInputs } from "../server/render/build";
 import { getStorage } from "../server/storage";
 
 type Outputs = Record<string, { key: string; hash: string; mime: string }>;
@@ -32,13 +32,14 @@ export async function renderHtml(browser: Browser, html: string, size: { w: numb
 export async function renderCertificate(browser: Browser, certificateId: string, force = false): Promise<void> {
   const src = await loadCertificateSource(certificateId);
   if (!src) return; // certificate deleted meanwhile
-  await withPlatform((tx) => tx.certificate.update({ where: { id: certificateId }, data: { renderStatus: "RENDERING", renderError: null } }));
-  const current = (await withPlatform((tx) => tx.certificate.findUnique({ where: { id: certificateId }, select: { outputs: true } })))?.outputs as Outputs | undefined;
+  const current = (await withPlatform((tx) => tx.certificate.update({ where: { id: certificateId }, data: { renderStatus: "RENDERING", renderError: null }, select: { outputs: true } }))).outputs as Outputs | undefined;
+  let shared: SharedRenderInputs | undefined; // fonts, images and QR are prepared once, and only if something actually needs rendering
   const outputs: Outputs = force ? {} : { ...(current ?? {}) };
   for (const key of OUTPUT_KEYS) {
     const hash = contentHash(src, key as OutputKey);
     if (outputs[key]?.hash === hash) continue;
-    const { html, size } = await buildCertificateHtml(src, key as OutputKey);
+    shared ??= await prepareShared(src);
+    const { html, size } = await buildCertificateHtml(src, key as OutputKey, shared);
     const pdf = key === "pdf";
     const body = await renderHtml(browser, html, size, pdf ? "pdf" : "png");
     const storageKey = `certificates/${src.orgId}/${src.publicId}/${key}-${hash}.${pdf ? "pdf" : "png"}`;

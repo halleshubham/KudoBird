@@ -1,10 +1,12 @@
 import * as React from "react";
+import { appUrl } from "../urls";
 import { emailCopy } from "@/i18n/email";
 import { parseSettings, type Locale } from "../campaigns/schema";
-import { blindIndex, decrypt } from "../crypto";
+import { blindIndex } from "../crypto";
+import { revealEmail } from "../pii";
 import { withPlatform } from "../db";
 import { assertFeature, assertWithinLimit, EntitlementError, recordUsage } from "../entitlements";
-import { env } from "../env";
+
 import { maskEmail } from "../campaigns/countries";
 import { replacePlaceholders } from "../render/placeholders";
 import { getStorage } from "../storage";
@@ -67,7 +69,7 @@ export async function sendCertificateEmail(certificateId: string, force = false)
     const prior = await withPlatform((tx) => tx.emailLog.findFirst({ where: { certificateId, kind: "CERTIFICATE", status: { in: ["SENT", "DELIVERED", "DELAYED", "SUPPRESSED", "SKIPPED"] } } }));
     if (prior) return "ALREADY_SENT";
   }
-  const to = decrypt(cert.entry.emailEnc);
+  const to = revealEmail(cert.entry)!; // checked non-null above
   const locale = cert.entry.locale;
   const settings = parseSettings(cert.campaign.settings);
   const copy = emailCopy(locale);
@@ -81,7 +83,7 @@ export async function sendCertificateEmail(certificateId: string, force = false)
     attachments: png ? [{ filename: `${cert.number}.png`, content: png }] : undefined,
     react: React.createElement(ContributorEmail, {
       locale, hello: fill(copy.hello, data), intro, note: png ? copy.certAttached : undefined, buttonLabel: copy.certButton,
-      url: new URL(`/c/${cert.publicId}?s=email`, env().APP_URL).toString(), footer: fill(copy.footer, data), accent: cert.campaign.org.primaryColor ?? undefined,
+      url: appUrl(`/c/${cert.publicId}?s=email`), footer: fill(copy.footer, data), accent: cert.campaign.org.primaryColor ?? undefined,
     }),
   });
 }
@@ -94,7 +96,7 @@ export async function sendRejectionEmail(entryId: string): Promise<EmailStatus |
   const settings = parseSettings(entry.campaign.settings);
   const data = { name: entry.name, campaign: entry.campaign.name, org: entry.campaign.org.name };
   return deliver({
-    orgId: entry.orgId, entryId, kind: "REJECTED", to: decrypt(entry.emailEnc), contributor: true,
+    orgId: entry.orgId, entryId, kind: "REJECTED", to: revealEmail(entry)!, contributor: true,
     subject: fill(settings.email.rejectedSubject[locale as Locale] || copy.rejectedSubject, data),
     react: React.createElement(ContributorEmail, { locale, hello: fill(copy.hello, data), intro: fill(settings.email.rejectedIntro[locale as Locale] || copy.rejectedIntro, data), footer: fill(copy.footer, data) }),
   });
@@ -105,7 +107,7 @@ export async function notifyNewEntry(entryId: string): Promise<number> {
   const entry = await withPlatform((tx) => tx.entry.findUnique({ where: { id: entryId }, include: { campaign: true } }));
   if (!entry) return 0;
   const members = await withPlatform((tx) => tx.membership.findMany({ where: { orgId: entry.orgId, entryNotifications: "INSTANT" }, include: { user: true } }));
-  const url = new URL(`/app/campaigns/${entry.campaignId}/entries`, env().APP_URL).toString();
+  const url = appUrl(`/app/campaigns/${entry.campaignId}/entries`);
   const pending = entry.status === "PENDING";
   for (const m of members) {
     await deliver({
@@ -136,7 +138,7 @@ export async function sendDailyDigests(now = new Date(), onlyOrgId?: string): Pr
     for (const m of members) {
       await deliver({
         orgId, kind: "ADMIN_DIGEST", to: m.user.email, contributor: false, subject: `${total} new ${total === 1 ? "entry" : "entries"} in the last 24 hours`,
-        react: React.createElement(AdminEntriesEmail, { heading: `${total} new ${total === 1 ? "entry" : "entries"} yesterday`, lines, actionLabel: "Open dashboard", actionUrl: new URL("/app", env().APP_URL).toString() }),
+        react: React.createElement(AdminEntriesEmail, { heading: `${total} new ${total === 1 ? "entry" : "entries"} yesterday`, lines, actionLabel: "Open dashboard", actionUrl: appUrl("/app") }),
       });
       sent++;
     }

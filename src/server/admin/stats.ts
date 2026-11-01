@@ -1,9 +1,9 @@
 import { withPlatform } from "../db";
+import { ymd } from "../../lib/format";
 import { currentPeriod } from "../entitlements";
 import { emailQueue, renderQueue } from "../queue";
 import { assertSuperAdmin } from "./guard";
 
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 export async function getPlatformStats(adminId: string, days = 30) {
   await assertSuperAdmin(adminId);

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { pageArgs } from "../paginate";
 import { Prisma } from "@prisma/client";
 import * as React from "react";
 import { audit } from "../audit";
@@ -8,7 +9,7 @@ import { sendEmail } from "../email";
 import { ActionEmail } from "../email/templates";
 import { currentPeriod, FEATURE_KEYS, LIMIT_KEYS, defaultPlanFor } from "../entitlements";
 import { env } from "../env";
-import { slugify } from "../slug";
+import { slugify, withUniqueSlug } from "../slug";
 import { getStorage } from "../storage";
 import { assertSuperAdmin, AdminError, platformAudit } from "./guard";
 import { normalizeEmail } from "../auth";
@@ -22,7 +23,7 @@ export async function listOrgs(adminId: string, q: { q?: string; status?: "ACTIV
   };
   return withPlatform(async (tx) => {
     const [orgs, total] = await Promise.all([
-      tx.organization.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((q.page ?? 1) - 1) * pageSize, take: pageSize, include: { plan: { select: { name: true, key: true } } } }),
+      tx.organization.findMany({ where, orderBy: { createdAt: "desc" }, ...pageArgs(q.page, pageSize), include: { plan: { select: { name: true, key: true } } } }),
       tx.organization.count({ where }),
     ]);
     const ids = orgs.map((o) => o.id);
@@ -75,37 +76,30 @@ export async function createOrgForOwner(adminId: string, input: { name: string; 
   const orgId = randomUUID();
   const base = slugify(name);
   let invite: { token: string } | null = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const slug = attempt === 0 ? base : `${base}-${randomUUID().slice(0, 4)}`;
-    try {
-      const org = await withPlatform(async (tx) => {
-        const plan = input.planKey ? await tx.plan.findFirst({ where: { key: input.planKey, active: true } }) : await defaultPlanFor(tx);
-        if (!plan) throw new AdminError("NOT_FOUND", "Plan not found");
-        const o = await tx.organization.create({ data: { id: orgId, name, slug, planId: plan.id } });
-        await tx.subscription.create({ data: { orgId, planId: plan.id } });
-        const owner = await tx.user.findUnique({ where: { email } });
-        if (owner) await tx.membership.create({ data: { orgId, userId: owner.id, role: "OWNER" } });
-        else {
-          const t = newToken();
-          await tx.invite.create({ data: { orgId, email, role: "OWNER", tokenHash: hashToken(t.token), invitedById: adminId, expiresAt: new Date(Date.now() + 14 * 86_400_000) } });
-          invite = { token: t.token };
-        }
-        await audit(tx, { orgId, actorId: adminId, action: "org.created_by_platform", entity: "Organization", entityId: orgId, meta: { owner: email } });
-        await platformAudit(tx, adminId, "org.created", "Organization", orgId, { name, owner: email, plan: plan.key });
-        return o;
-      });
-      if (invite) {
-        const url = new URL("/invite/accept", env().APP_URL);
-        url.searchParams.set("token", (invite as { token: string }).token);
-        await sendEmail({ to: email, subject: `Your ${name} workspace on KudoBird`, react: plainOwnerInvite(name, url.toString()) });
+  const org = await withUniqueSlug(base, "organisation", (slug) =>
+    withPlatform(async (tx) => {
+      const plan = input.planKey ? await tx.plan.findFirst({ where: { key: input.planKey, active: true } }) : await defaultPlanFor(tx);
+      if (!plan) throw new AdminError("NOT_FOUND", "Plan not found");
+      const o = await tx.organization.create({ data: { id: orgId, name, slug, planId: plan.id } });
+      await tx.subscription.create({ data: { orgId, planId: plan.id } });
+      const owner = await tx.user.findUnique({ where: { email } });
+      if (owner) await tx.membership.create({ data: { orgId, userId: owner.id, role: "OWNER" } });
+      else {
+        const t = newToken();
+        await tx.invite.create({ data: { orgId, email, role: "OWNER", tokenHash: hashToken(t.token), invitedById: adminId, expiresAt: new Date(Date.now() + 14 * 86_400_000) } });
+        invite = { token: t.token };
       }
-      return { org, invited: !!invite };
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
-      throw e;
-    }
+      await audit(tx, { orgId, actorId: adminId, action: "org.created_by_platform", entity: "Organization", entityId: orgId, meta: { owner: email } });
+      await platformAudit(tx, adminId, "org.created", "Organization", orgId, { name, owner: email, plan: plan.key });
+      return o;
+    }),
+  );
+  if (invite) {
+    const url = new URL("/invite/accept", env().APP_URL);
+    url.searchParams.set("token", (invite as { token: string }).token);
+    await sendEmail({ to: email, subject: `Your ${name} workspace on KudoBird`, react: plainOwnerInvite(name, url.toString()) });
   }
-  throw new AdminError("SLUG_TAKEN", "Could not allocate a unique address");
+  return { org, invited: !!invite };
 }
 
 export async function setOrgPlan(adminId: string, orgId: string, planKey: string) {

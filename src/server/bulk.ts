@@ -1,4 +1,4 @@
-import { audit } from "./audit";
+import { actorOf, audit } from "./audit";
 import { blindIndex, encrypt, sha256 } from "./crypto";
 import { withTenant } from "./db";
 import { assertFeature, assertWithinLimit, EntitlementError, getUsage, loadEntitlements } from "./entitlements";
@@ -6,7 +6,7 @@ import { issueCertificateTx } from "./certificates/issue";
 import { parseCsv, toCsv } from "./csv";
 import { OrgError, type OrgContext } from "./orgs";
 import { assertCan } from "./permissions";
-import { enqueueRender } from "./queue";
+import { enqueueRenders } from "./queue";
 import { entryPayload } from "./webhook-payloads";
 import { queueWebhookEventTx } from "./webhooks";
 import { parseFields, parseSettings, type FormField } from "./campaigns/schema";
@@ -143,7 +143,7 @@ export async function commitBulk(ctx: OrgContext, campaignId: string, text: stri
       }
     }
   }
-  await withTenant(ctx, (tx) => audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "bulk.issued", entity: "Campaign", entityId: campaignId, meta: { issued: issuedIds.length, failed, skipped: r.preview.length - r.valid.length, emails: opts.sendEmails } }));
-  for (const id of issuedIds) await enqueueRender(id);
+  await withTenant(ctx, (tx) => audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "bulk.issued", entity: "Campaign", entityId: campaignId, meta: { issued: issuedIds.length, failed, skipped: r.preview.length - r.valid.length, emails: opts.sendEmails } }));
+  await enqueueRenders(issuedIds);
   return { issued: issuedIds.length, failed, skipped: r.preview.length - r.valid.length, issuedCertificateIds: issuedIds };
 }

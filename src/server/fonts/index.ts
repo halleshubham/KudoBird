@@ -116,8 +116,15 @@ export type FontCssMode = "inline" | "url";
  * zero network, no file:// restrictions). "url" points at /api/fonts/file (used by the live preview).
  * Weights a family lacks are served by the nearest cached weight.
  */
+const inlineCache = new Map<string, string>();
+const INLINE_CACHE_MAX = 64;
+
 export async function fontFaceCss(families: string[], mode: FontCssMode, weights: number[] = DEFAULT_WEIGHTS): Promise<string> {
   const unique = [...new Set(families)];
+  // Inline CSS is ~0.3-1 MB per family (base64 woff2). Font files never change once cached, so build it once per process.
+  const cacheKey = mode === "inline" ? `${[...unique].sort().join("|")}#${weights.join(",")}` : null;
+  const hit = cacheKey ? inlineCache.get(cacheKey) : undefined;
+  if (hit !== undefined) return hit;
   const parts = await Promise.all(
     unique.map(async (family) => {
       const { dir, manifest } = await ensureFont(family, weights);
@@ -133,7 +140,12 @@ export async function fontFaceCss(families: string[], mode: FontCssMode, weights
       return rules.join("\n");
     }),
   );
-  return parts.join("\n");
+  const css = parts.join("\n");
+  if (cacheKey) {
+    if (inlineCache.size >= INLINE_CACHE_MAX) inlineCache.delete(inlineCache.keys().next().value as string);
+    inlineCache.set(cacheKey, css);
+  }
+  return css;
 }
 
 export async function readFontFile(slug: string, file: string): Promise<Buffer | null> {

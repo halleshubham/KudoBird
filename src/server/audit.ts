@@ -24,3 +24,6 @@ export async function audit(tx: Tx, input: AuditInput): Promise<void> {
     },
   });
 }
+
+/** Who is acting: the signed-in user, plus the platform admin when this is a support (impersonation) session. */
+export const actorOf = (ctx: { userId?: string | null; impersonatorId?: string | null }) => ({ actorId: ctx.userId ?? null, impersonatorId: ctx.impersonatorId ?? null });

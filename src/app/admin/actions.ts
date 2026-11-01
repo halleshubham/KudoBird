@@ -1,8 +1,9 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { toActionState, type ActionState } from "@/app/_lib/action-errors";
 import { z } from "zod";
-import { AdminError } from "@/server/admin/guard";
+
 import { startImpersonation } from "@/server/admin/impersonation";
 import { createGlobalTemplate, deleteGlobalTemplate, precacheFont, renameGlobalTemplate, saveGlobalTemplateDesign, setFontCurated, syncFonts, updateSettings, upsertPlan } from "@/server/admin/content";
 import { createOrgForOwner, purgeOrg, restoreOrg, setOrgOverrides, setOrgPlan, setOrgStatus, softDeleteOrg } from "@/server/admin/orgs";
@@ -12,16 +13,9 @@ import { PRESETS } from "@/server/render/presets";
 import { enterSupportSession, leaveSupportSession, requireSuperAdmin } from "@/server/session";
 import { currentSession } from "@/server/session";
 
-export type AdminState = { error?: string; info?: string } | undefined;
+export type AdminState = ActionState;
 
-const fail = (e: unknown): AdminState => {
-  if ((e as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw e;
-  if (e instanceof AdminError) return { error: e.message };
-  if (e instanceof z.ZodError) return { error: e.issues[0] ? `${e.issues[0].path.join(".") || "input"}: ${e.issues[0].message}` : "Invalid input" };
-  if (e instanceof SyntaxError) return { error: "That is not valid JSON" };
-  console.error(e);
-  return { error: "Something went wrong" };
-};
+const fail = toActionState;
 
 /** Every action authenticates on its own (never relies on the page it was rendered in). */
 async function run(path: string | null, fn: (adminId: string) => Promise<string | void>): Promise<AdminState> {

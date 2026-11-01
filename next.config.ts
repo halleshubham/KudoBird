@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["@prisma/client", "playwright"],
+  serverExternalPackages: ["@prisma/client", "playwright", "bullmq", "ioredis"],
   poweredByHeader: false,
   // The app itself can only be framed by itself. /embed/* is handled by src/middleware.ts (per-campaign allow-list).
   async headers() {

@@ -1,22 +1,13 @@
 "use server";
 import { redirect } from "next/navigation";
+import { toActionState, type ActionState } from "@/app/_lib/action-errors";
 import { z } from "zod";
-import {
-  AuthError, beginTotpSetup, confirmTotpSetup, loginWithPassword, registerUser, requestMagicLink, requestPasswordReset,
-  resetPassword, verifyTotp,
-} from "@/server/auth";
-import { prisma } from "@/server/db";
-import { createOrganization, OrgError } from "@/server/orgs";
+import { beginTotpSetup, confirmTotpSetup, loginWithPassword, markMfaVerified, registerUser, requestMagicLink, requestPasswordReset, resetPassword, setActiveOrg, verifyTotp } from "@/server/auth";
+import { createOrganization } from "@/server/orgs";
 import { clearSessionCookie, currentSession, requireOrg, requireUser, setSessionCookie } from "@/server/session";
 
-type State = { error?: string; info?: string } | undefined;
-const fail = (e: unknown): State => {
-  if (e instanceof AuthError || e instanceof OrgError) return { error: e.message };
-  if (e instanceof z.ZodError) return { error: e.issues[0]?.message ?? "Invalid input" };
-  if ((e as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw e;
-  console.error(e);
-  return { error: "Something went wrong" };
-};
+type State = ActionState;
+const fail = toActionState;
 const safeNext = (n: FormDataEntryValue | null) => (typeof n === "string" && n.startsWith("/") && !n.startsWith("//") ? n : "/app");
 
 export async function loginAction(_: State, fd: FormData): Promise<State> {
@@ -72,7 +63,7 @@ export async function createOrgAction(_: State, fd: FormData): Promise<State> {
     const { user, session } = await requireUser();
     const { name } = z.object({ name: z.string().trim().min(2, "Organisation name is required").max(80) }).parse(Object.fromEntries(fd));
     const org = await createOrganization(user.id, name);
-    await prisma.session.update({ where: { id: session.id }, data: { activeOrgId: org.id } });
+    await setActiveOrg(session.id, org.id);
     redirect("/app");
   } catch (e) { return fail(e); }
 }
@@ -80,7 +71,7 @@ export async function createOrgAction(_: State, fd: FormData): Promise<State> {
 export async function switchOrgAction(fd: FormData) {
   const { user, session, orgs } = await requireOrg();
   const orgId = String(fd.get("orgId"));
-  if (orgs.some((o) => o.org.id === orgId)) await prisma.session.update({ where: { id: session.id }, data: { activeOrgId: orgId } });
+  if (orgs.some((o) => o.org.id === orgId)) await setActiveOrg(session.id, orgId);
   void user;
   redirect("/app");
 }
@@ -92,7 +83,7 @@ export async function verifyTotpAction(_: State, fd: FormData): Promise<State> {
   const code = String(fd.get("code") ?? "");
   const ok = session.user.totpEnabledAt ? verifyTotp(session.user, code) : await confirmTotpSetup(session.user.id, code);
   if (!ok) return { error: "Invalid code" };
-  await prisma.session.update({ where: { id: session.id }, data: { mfaVerified: true } });
+  await markMfaVerified(session.id);
   redirect("/app");
 }
 

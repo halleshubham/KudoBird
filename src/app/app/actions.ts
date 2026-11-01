@@ -1,22 +1,14 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { toActionState, type ActionState } from "@/app/_lib/action-errors";
 import { z } from "zod";
 import { Role } from "@prisma/client";
-import { EntitlementError } from "@/server/entitlements";
-import { ForbiddenError } from "@/server/permissions";
-import { changeMemberRole, inviteMember, OrgError, removeMember, revokeInvite, updateOrganization } from "@/server/orgs";
-import { requireOrg } from "@/server/session";
-import { withTenant } from "@/server/db";
-import { audit } from "@/server/audit";
 
-type State = { error?: string; info?: string } | undefined;
-const fail = (e: unknown): State => {
-  if (e instanceof ForbiddenError) return { error: "You do not have permission to do that" };
-  if (e instanceof OrgError || e instanceof EntitlementError) return { error: e.message };
-  if (e instanceof z.ZodError) return { error: e.issues[0]?.message ?? "Invalid input" };
-  console.error(e);
-  return { error: "Something went wrong" };
-};
+import { changeMemberRole, inviteMember, removeMember, revokeInvite, updateOrganization, setNotificationMode } from "@/server/orgs";
+import { requireOrg } from "@/server/session";
+
+type State = ActionState;
+const fail = toActionState;
 
 export async function inviteAction(_: State, fd: FormData): Promise<State> {
   try {
@@ -58,11 +50,7 @@ export async function updateOrgAction(_: State, fd: FormData): Promise<State> {
 
 export async function setNotificationsAction(fd: FormData) {
   const { ctx } = await requireOrg();
-  const mode = z.enum(["INSTANT", "DAILY", "OFF"]).parse(fd.get("mode"));
-  await withTenant(ctx, async (tx) => {
-    await tx.membership.updateMany({ where: { orgId: ctx.orgId, userId: ctx.userId }, data: { entryNotifications: mode } });
-    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "member.notifications_changed", entity: "Membership", meta: { mode } });
-  });
+  await setNotificationMode(ctx, z.enum(["INSTANT", "DAILY", "OFF"]).parse(fd.get("mode")));
   revalidatePath("/app/settings");
 }
 

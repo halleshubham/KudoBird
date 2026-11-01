@@ -1,10 +1,9 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { toActionState, type ActionState } from "@/app/_lib/action-errors";
 import { z } from "zod";
-import { EntitlementError } from "@/server/entitlements";
-import { ForbiddenError } from "@/server/permissions";
-import { OrgError } from "@/server/orgs";
+
 import {
   createCampaign, createSignatory, deleteSignatory, getCampaign, reviewEntry, revealEntryContact, saveTemplateDesign,
   setCampaignSignatories, updateCampaign,
@@ -15,15 +14,8 @@ import { regenerateCertificate, restoreCertificate, revokeCertificate } from "@/
 import { resendCertificateEmail } from "@/server/email/resend";
 import { requireOrg } from "@/server/session";
 
-type State = { error?: string; info?: string } | undefined;
-const fail = (e: unknown): State => {
-  if (e instanceof ForbiddenError) return { error: "You do not have permission to do that" };
-  if (e instanceof OrgError || e instanceof EntitlementError) return { error: e.message };
-  if (e instanceof z.ZodError) return { error: e.issues[0] ? `${e.issues[0].path.join(".")}: ${e.issues[0].message}` : "Invalid input" };
-  if ((e as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw e;
-  console.error(e);
-  return { error: "Something went wrong" };
-};
+type State = ActionState;
+const fail = toActionState;
 
 export async function createCampaignAction(_: State, fd: FormData): Promise<State> {
   let id: string;

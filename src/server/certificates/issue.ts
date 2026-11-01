@@ -1,18 +1,19 @@
 import { randomBytes } from "node:crypto";
-import { audit } from "../audit";
+import { actorOf, audit } from "../audit";
 import { withPlatform, withTenant, type Tx } from "../db";
 import { assertWithinLimit, recordUsage } from "../entitlements";
 import { OrgError, type OrgContext } from "../orgs";
 import { assertCan } from "../permissions";
 import { parseFields } from "../campaigns/schema";
 import { enqueueRender } from "../queue";
-import { certificatePayload, contactOf } from "../webhook-payloads";
+import { formatCertDate } from "../../lib/format";
+import { revealContact } from "../pii";
+import { certificatePayload } from "../webhook-payloads";
 import { queueWebhookEventTx } from "../webhooks";
 
 export const newPublicId = () => randomBytes(16).toString("base64url"); // 128 bits, not guessable
 
-const DATE_LOCALES: Record<string, string> = { mr: "mr-IN", hi: "hi-IN", en: "en-IN" };
-export const formatCertDate = (d: Date, locale: string) => new Intl.DateTimeFormat(DATE_LOCALES[locale] ?? "en-IN", { dateStyle: "long", timeZone: "Asia/Kolkata" }).format(d);
+export { formatCertDate };
 
 /**
  * Issues the certificate for an approved entry. Idempotent per entry. Runs inside the caller's
@@ -45,7 +46,7 @@ export async function issueCertificateTx(tx: Tx, entryId: string): Promise<{ id:
   });
   await recordUsage(tx, entry.orgId, "certificates_issued", 1);
   await audit(tx, { orgId: entry.orgId, action: "certificate.issued", entity: "Certificate", entityId: cert.id, meta: { number } });
-  await queueWebhookEventTx(tx, entry.orgId, "certificate.issued", async (pii) => certificatePayload(cert, campaign.name, pii ? contactOf(entry) : undefined));
+  await queueWebhookEventTx(tx, entry.orgId, "certificate.issued", async (pii) => certificatePayload(cert, campaign.name, pii ? revealContact(entry) : undefined));
   return { id: cert.id, publicId: cert.publicId, created: true };
 }
 
@@ -58,7 +59,6 @@ export async function issueCertificate(entryId: string): Promise<{ id: string; p
 
 // ---------------------------------------------------------------- org-side actions
 
-const actor = (ctx: OrgContext) => ({ actorId: ctx.userId, impersonatorId: ctx.impersonatorId });
 
 /** Re-renders with the campaign's CURRENT template version (explicit action; issued certificates are otherwise frozen). */
 export async function regenerateCertificate(ctx: OrgContext, certificateId: string, useLatestDesign = false) {
@@ -72,7 +72,7 @@ export async function regenerateCertificate(ctx: OrgContext, certificateId: stri
       templateVersionId = (await tx.templateVersion.findUniqueOrThrow({ where: { templateId_version: { templateId: tpl.id, version: tpl.latestVersion } } })).id;
     }
     await tx.certificate.update({ where: { id: cert.id }, data: { renderStatus: "QUEUED", renderError: null, templateVersionId } });
-    await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "certificate.regenerated", entity: "Certificate", entityId: cert.id, meta: { useLatestDesign } });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "certificate.regenerated", entity: "Certificate", entityId: cert.id, meta: { useLatestDesign } });
   });
   await enqueueRender(certificateId, true);
 }
@@ -83,8 +83,8 @@ export async function revokeCertificate(ctx: OrgContext, certificateId: string, 
     const cert = await tx.certificate.findFirst({ where: { id: certificateId, orgId: ctx.orgId } });
     if (!cert) throw new OrgError("NOT_FOUND", "Certificate not found");
     const revoked = await tx.certificate.update({ where: { id: cert.id }, data: { status: "REVOKED", revokedAt: new Date(), revokeReason: reason?.slice(0, 300) ?? null, renderStatus: "QUEUED" }, include: { campaign: { select: { name: true } }, entry: true } });
-    await queueWebhookEventTx(tx, ctx.orgId, "certificate.revoked", async (pii) => certificatePayload(revoked, revoked.campaign.name, pii ? contactOf(revoked.entry) : undefined));
-    await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "certificate.revoked", entity: "Certificate", entityId: cert.id, meta: { reason } });
+    await queueWebhookEventTx(tx, ctx.orgId, "certificate.revoked", async (pii) => certificatePayload(revoked, revoked.campaign.name, pii ? revealContact(revoked.entry) : undefined));
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "certificate.revoked", entity: "Certificate", entityId: cert.id, meta: { reason } });
   });
   await enqueueRender(certificateId, true); // re-render so images carry the REVOKED stamp
 }
@@ -95,7 +95,7 @@ export async function restoreCertificate(ctx: OrgContext, certificateId: string)
     const cert = await tx.certificate.findFirst({ where: { id: certificateId, orgId: ctx.orgId } });
     if (!cert) throw new OrgError("NOT_FOUND", "Certificate not found");
     await tx.certificate.update({ where: { id: cert.id }, data: { status: "ACTIVE", revokedAt: null, revokeReason: null, renderStatus: "QUEUED" } });
-    await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "certificate.restored", entity: "Certificate", entityId: cert.id });
+    await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "certificate.restored", entity: "Certificate", entityId: cert.id });
   });
   await enqueueRender(certificateId, true);
 }

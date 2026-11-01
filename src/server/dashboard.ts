@@ -1,4 +1,5 @@
 import { withTenant } from "./db";
+import { ymd } from "../lib/format";
 import { assertCan } from "./permissions";
 import type { OrgContext } from "./orgs";
 
@@ -10,7 +11,6 @@ export interface DashboardData {
   topCampaigns: { id: string; name: string; certificates: number; views: number; shares: number }[];
 }
 
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 /** Everything the dashboard needs, in a few grouped queries (no per-row work in the database layer). */
 export async function getDashboard(ctx: OrgContext, days = 30): Promise<DashboardData> {
@@ -35,14 +35,17 @@ export async function getDashboard(ctx: OrgContext, days = 30): Promise<Dashboar
     const shares = events.filter((e) => e.type === "SHARE");
     const byPlatform = new Map<string, number>();
     for (const e of shares) byPlatform.set(e.platform, (byPlatform.get(e.platform) ?? 0) + e._count);
-    const sum = (id: string, t: string) => events.filter((e) => e.campaignId === id && e.type === t).reduce((n, e) => n + e._count, 0);
+    const perCampaign = new Map<string, number>(); // `${campaignId}:${type}` -> count
+    for (const e of events) { const k = `${e.campaignId}:${e.type}`; perCampaign.set(k, (perCampaign.get(k) ?? 0) + e._count); }
+    const certsByCampaign = new Map(perCampaignCerts.map((p) => [p.campaignId, p._count]));
+    const sum = (id: string, t: string) => perCampaign.get(`${id}:${t}`) ?? 0;
     return {
       days,
       totals: { certificates, thisMonth, entries, pending, views: events.filter((e) => e.type === "VIEW").reduce((n, e) => n + e._count, 0), shares: shares.reduce((n, e) => n + e._count, 0) },
       series: [...buckets].map(([date, count]) => ({ date, count })),
       sharesByPlatform: [...byPlatform].map(([platform, count]) => ({ platform, count })).sort((a, b) => b.count - a.count),
       topCampaigns: campaigns
-        .map((c) => ({ id: c.id, name: c.name, certificates: perCampaignCerts.find((p) => p.campaignId === c.id)?._count ?? 0, views: sum(c.id, "VIEW"), shares: sum(c.id, "SHARE") }))
+        .map((c) => ({ id: c.id, name: c.name, certificates: certsByCampaign.get(c.id) ?? 0, views: sum(c.id, "VIEW"), shares: sum(c.id, "SHARE") }))
         .sort((a, b) => b.certificates - a.certificates).slice(0, 5),
     };
   });

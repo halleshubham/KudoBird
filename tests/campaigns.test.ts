@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/server/queue", () => ({ enqueueRender: vi.fn(async () => {}), enqueueEmail: vi.fn(async () => {}), RENDER_QUEUE: "render", EMAIL_QUEUE: "email" }));
+vi.mock("@/server/queue", () => ({ enqueueRender: vi.fn(async () => {}), enqueueRenders: vi.fn(async () => {}), enqueueEmail: vi.fn(async () => {}), RENDER_QUEUE: "render", EMAIL_QUEUE: "email" }));
 
 import { prisma, withPlatform, withTenant } from "@/server/db";
 import { decrypt } from "@/server/crypto";
@@ -223,3 +223,27 @@ describe("assets", () => {
 
 void setOtpProvider; void randomUUID;
 const listEntriesFor = (ctx: OrgContext) => listEntries(ctx, campaignId, { pageSize: 100 });
+
+describe("concurrent identical submissions", () => {
+  const same = { name: "Race Person", mobile: "9333300001", consent: "on" };
+  const fire = (n: number) => Promise.all(Array.from({ length: n }, (_, i) => submitEntry({ orgSlug: T.org.slug, campaignSlug: slug, raw: same, locale: "en", ip: `10.77.0.${i + 1}` })));
+  const entriesFor = () => withPlatform((tx) => tx.entry.count({ where: { campaignId, name: "Race Person" } }));
+
+  it("block mode lets exactly one of N simultaneous identical submissions in", async () => {
+    await updateCampaign(c("EDITOR"), campaignId, { settings: { captcha: false, duplicateMode: "block" } });
+    const before = await entriesFor();
+    const results = await fire(8);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok && r.code === "DUPLICATE")).toHaveLength(7);
+    expect(await entriesFor()).toBe(before + 1);
+  });
+  it("return_existing mode gives every request the same entry and certificate", async () => {
+    await updateCampaign(c("EDITOR"), campaignId, { settings: { captcha: false, duplicateMode: "return_existing" } });
+    const raw = { ...same, mobile: "9333300002" };
+    const results = await Promise.all(Array.from({ length: 6 }, (_, i) => submitEntry({ orgSlug: T.org.slug, campaignSlug: slug, raw, locale: "en", ip: `10.78.0.${i + 1}` })));
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(new Set(results.map((r) => r.ok && r.entryId)).size).toBe(1);
+    expect(new Set(results.map((r) => r.ok && r.certificateId)).size).toBe(1);
+    expect(results.filter((r) => r.ok && !r.duplicate)).toHaveLength(1);
+  });
+});

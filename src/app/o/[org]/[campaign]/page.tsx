@@ -43,7 +43,7 @@ export default async function PublicCampaignPage({ params, searchParams }: { par
           fields={c.fields.map((f) => ({ key: f.key, label: fieldLabel(f, lang), type: f.type, required: f.required, options: f.options }))}
           consentRequired={c.settings.consentRequired} consentText={c.settings.consentText[lang] || m.consent}
           purposeText={c.settings.purposeText[lang] || m.purpose}
-          wall={c.settings.wallEnabled} captchaSiteKey={c.settings.captcha ? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY : undefined}
+          wall={c.settings.wallEnabled} captchaSiteKey={c.settings.captcha ? process.env.TURNSTILE_SITE_KEY : undefined}
           accent={c.org.primaryColor ?? "#7c3aed"}
         />
       )}

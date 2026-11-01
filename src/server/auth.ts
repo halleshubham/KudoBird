@@ -1,4 +1,5 @@
 import type { AuthTokenType, User } from "@prisma/client";
+import { appUrl } from "./urls";
 import { authenticator } from "otplib";
 import { decrypt, encrypt, hashPassword, hashToken, newToken, verifyPassword } from "./crypto";
 import { prisma } from "./db";
@@ -168,7 +169,7 @@ export const googleEnabled = () => !!(env().GOOGLE_CLIENT_ID && env().GOOGLE_CLI
 export function googleAuthUrl(state: string): string {
   const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   u.searchParams.set("client_id", env().GOOGLE_CLIENT_ID!);
-  u.searchParams.set("redirect_uri", new URL("/auth/google/callback", env().APP_URL).toString());
+  u.searchParams.set("redirect_uri", appUrl("/auth/google/callback"));
   u.searchParams.set("response_type", "code");
   u.searchParams.set("scope", "openid email profile");
   u.searchParams.set("state", state);
@@ -183,7 +184,7 @@ export async function loginWithGoogleCode(code: string): Promise<User> {
       code,
       client_id: env().GOOGLE_CLIENT_ID!,
       client_secret: env().GOOGLE_CLIENT_SECRET!,
-      redirect_uri: new URL("/auth/google/callback", env().APP_URL).toString(),
+      redirect_uri: appUrl("/auth/google/callback"),
       grant_type: "authorization_code",
     }),
   });
@@ -200,4 +201,16 @@ export async function loginWithGoogleCode(code: string): Promise<User> {
     : await (async () => { await guardSignups(); return prisma.user.create({ data: { email, name: info.name, googleId: info.sub, emailVerifiedAt: new Date() } }); })();
   if (user.disabledAt) throw new AuthError("DISABLED", "This account is disabled");
   return user;
+}
+
+// ---------------------------------------------------------------- session state changes (so pages and actions never touch the database)
+
+/** Remember which organisation this browser session is working in. */
+export async function setActiveOrg(sessionId: string, orgId: string | null): Promise<void> {
+  await prisma.session.update({ where: { id: sessionId }, data: { activeOrgId: orgId } });
+}
+
+/** The user passed (or just enrolled) their second factor in this session. */
+export async function markMfaVerified(sessionId: string): Promise<void> {
+  await prisma.session.update({ where: { id: sessionId }, data: { mfaVerified: true } });
 }
