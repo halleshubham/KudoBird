@@ -23,3 +23,23 @@ export function RenderProgress({ publicId, failed, labels }: { publicId: string;
     </div>
   );
 }
+
+const ALL_OUTPUTS = 5; // square, story, link, a4, pdf
+
+/** The first image appears as soon as it is ready; this quietly refreshes once the other sizes and the PDF are finished too, so the download menu is complete. */
+export function RefreshWhenComplete({ publicId, have }: { publicId: string; have: number }) {
+  const router = useRouter();
+  useEffect(() => {
+    if (have >= ALL_OUTPUTS) return;
+    let stop = false, tries = 0;
+    const tick = async () => {
+      const r = await fetch(`/api/c/${publicId}/status`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
+      if (stop) return;
+      if ((r?.outputs?.length ?? 0) >= ALL_OUTPUTS || r?.renderStatus === "FAILED") router.refresh();
+      else if (++tries < 20) setTimeout(tick, 2000);
+    };
+    const t = setTimeout(tick, 1500);
+    return () => { stop = true; clearTimeout(t); };
+  }, [publicId, have, router]);
+  return null;
+}

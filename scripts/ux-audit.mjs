@@ -36,6 +36,11 @@ for (const [vp, width, height] of [["desktop", 1360, 860], ["phone", 390, 800]])
   await page.goto(BASE + "/app/campaigns");
   const first = await page.locator('a[href^="/app/campaigns/"]').first().getAttribute("href");
   if (first) for (const tab of ["", "/form", "/design", "/entries", "/bulk"]) pages.push(first + tab);
+  if (first) { // a public certificate page, taken from the first entry that has one
+    await page.goto(BASE + first + "/entries");
+    const cert = await page.locator('a[href^="/c/"]').first().getAttribute("href").catch(() => null);
+    if (cert) pages.push(cert);
+  }
   for (const p of pages) await scan(p);
 }
 await browser.close();
