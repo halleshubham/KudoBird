@@ -3,6 +3,9 @@ node_modules
 .env
 .env.local
 *.tsbuildinfo
-storage/
+# runtime data (uploads, rendered certificates, font cache) in the project root only; NOT src/server/storage
+/storage/
 coverage/
 tsconfig.tsbuildinfo
+dump.rdb
+*.rdb
