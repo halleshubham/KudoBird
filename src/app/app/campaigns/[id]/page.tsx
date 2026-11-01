@@ -2,6 +2,7 @@ import { ActionForm, Field } from "@/components/ActionForm";
 import { CampaignTabs } from "@/components/Tabs";
 import { COUNTRIES } from "@/server/campaigns/countries";
 import { getCampaign } from "@/server/campaigns/service";
+import { getCampaignStats } from "@/server/certificates/events";
 import { env } from "@/server/env";
 import { withTenant } from "@/server/db";
 import { requireOrg } from "@/server/session";
@@ -18,6 +19,7 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
   const org = await withTenant(ctx, (tx) => tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId } }));
   const url = `${env().APP_URL}/o/${org.slug}/${c.slug}`;
   const s = c.settings;
+  const stats = await getCampaignStats(ctx, id);
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold">{c.name}</h1>
@@ -26,6 +28,15 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
         <p className="font-semibold">Public form link</p>
         <p className="break-all text-brand-700">{url}</p>
         <p className="text-gray-500">{c.status === "ACTIVE" ? "Live: anyone with the link can submit." : "Set the status to Active to start accepting entries."}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        {[["Certificates", stats.certificates], ["Page views", stats.views], ["Share clicks", stats.shares], ["Pending approval", stats.entries.PENDING ?? 0]].map(([k, v]) => (
+          <div key={k} className="card"><p className="text-xs uppercase tracking-wide text-gray-500">{k}</p><p className="text-2xl font-semibold">{v}</p></div>
+        ))}
+        {Object.keys(stats.sharesByPlatform).length > 0 && (
+          <div className="card col-span-2 sm:col-span-4"><p className="mb-1 text-xs uppercase tracking-wide text-gray-500">Shares by platform</p>
+            <p>{Object.entries(stats.sharesByPlatform).map(([k, v]) => `${k}: ${v}`).join(" · ")}</p></div>
+        )}
       </div>
       <div className="grid gap-5 md:grid-cols-2">
         <div className="card">
@@ -67,6 +78,15 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
             <Check name="wallEnabled" label="Offer a public contributors wall (opt-in)" checked={s.wallEnabled} />
             {(["mr", "hi", "en"] as const).map((l) => (
               <Field key={l} name={`consent_${l}`} label={`Custom consent text (${l.toUpperCase()}), optional`} defaultValue={s.consentText[l] ?? ""} />
+            ))}
+            <p className="pt-2 text-sm font-semibold">Emails to contributors (optional overrides)</p>
+            <p className="text-xs text-gray-500">Use {"{{name}}"}, {"{{campaign}}"}, {"{{certificate_no}}"}, {"{{org}}"}. Leave empty for the built-in translation.</p>
+            {(["mr", "hi", "en"] as const).map((l) => (
+              <div key={l} className="space-y-2">
+                <Field name={`certSubject_${l}`} label={`Certificate email subject (${l.toUpperCase()})`} defaultValue={s.email.certificateSubject[l] ?? ""} />
+                <Field name={`certIntro_${l}`} label={`Certificate email intro (${l.toUpperCase()})`} defaultValue={s.email.certificateIntro[l] ?? ""} />
+                <Field name={`rejIntro_${l}`} label={`Rejection email text (${l.toUpperCase()})`} defaultValue={s.email.rejectedIntro[l] ?? ""} />
+              </div>
             ))}
             <Field name="shareText" label="Share text ({{campaign}}, {{url}}, {{name}})" defaultValue={s.shareText} />
             <Field name="hashtags" label="Hashtags (space separated, no #)" defaultValue={s.hashtags.join(" ")} />

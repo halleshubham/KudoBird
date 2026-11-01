@@ -6,6 +6,8 @@ import { EntitlementError } from "@/server/entitlements";
 import { ForbiddenError } from "@/server/permissions";
 import { changeMemberRole, inviteMember, OrgError, removeMember, revokeInvite, updateOrganization } from "@/server/orgs";
 import { requireOrg } from "@/server/session";
+import { withTenant } from "@/server/db";
+import { audit } from "@/server/audit";
 
 type State = { error?: string; info?: string } | undefined;
 const fail = (e: unknown): State => {
@@ -52,4 +54,14 @@ export async function updateOrgAction(_: State, fd: FormData): Promise<State> {
     revalidatePath("/app", "layout");
     return { info: "Saved" };
   } catch (e) { return fail(e); }
+}
+
+export async function setNotificationsAction(fd: FormData) {
+  const { ctx } = await requireOrg();
+  const mode = z.enum(["INSTANT", "DAILY", "OFF"]).parse(fd.get("mode"));
+  await withTenant(ctx, async (tx) => {
+    await tx.membership.updateMany({ where: { orgId: ctx.orgId, userId: ctx.userId }, data: { entryNotifications: mode } });
+    await audit(tx, { orgId: ctx.orgId, actorId: ctx.userId, impersonatorId: ctx.impersonatorId, action: "member.notifications_changed", entity: "Membership", meta: { mode } });
+  });
+  revalidatePath("/app/settings");
 }

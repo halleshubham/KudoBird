@@ -52,6 +52,36 @@ enum RenderStatus {
   FAILED
 }
 
+enum NotifyMode {
+  INSTANT
+  DAILY
+  OFF
+}
+
+enum EmailKind {
+  CERTIFICATE
+  REJECTED
+  ADMIN_ENTRY
+  ADMIN_DIGEST
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  DELAYED
+  BOUNCED
+  COMPLAINED
+  FAILED
+  SUPPRESSED
+  SKIPPED
+}
+
+enum EventType {
+  VIEW
+  SHARE
+}
+
 enum AssetKind {
   LOGO
   SIGNATURE
@@ -153,6 +183,9 @@ model Organization {
   limitOverrides Json      @default("{}")
   primaryColor   String?
   customDomain   String?   @unique
+  // Plan-gated custom sender (feature "customEmailSender"); verified through Resend
+  emailFrom           String?
+  emailDomainVerified Boolean @default(false)
   createdAt      DateTime  @default(now())
   deletedAt      DateTime?
 
@@ -168,6 +201,8 @@ model Organization {
   assets        Asset[]
   entries       Entry[]
   certificates  Certificate[]
+  emailLogs     EmailLog[]
+  events        CertificateEvent[]
 }
 
 model Membership {
@@ -175,6 +210,8 @@ model Membership {
   orgId     String   @db.Uuid
   userId    String   @db.Uuid
   role      Role
+  // How this member hears about new entries
+  entryNotifications NotifyMode @default(DAILY)
   createdAt DateTime @default(now())
 
   org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -419,4 +456,54 @@ model Certificate {
 
   @@unique([campaignId, number])
   @@index([orgId, issuedAt])
+}
+
+// Delivery status per email. The address itself is never stored here (only a masked form).
+model EmailLog {
+  id            String      @id @default(uuid()) @db.Uuid
+  orgId         String      @db.Uuid
+  entryId       String?     @db.Uuid
+  certificateId String?     @db.Uuid
+  kind          EmailKind
+  toMasked      String
+  status        EmailStatus @default(QUEUED)
+  providerId    String?     @unique
+  error         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([entryId])
+  @@index([orgId, createdAt])
+}
+
+// Platform-wide: addresses that bounced or complained are never mailed again, by any org.
+model Suppression {
+  id        String   @id @default(uuid()) @db.Uuid
+  emailHash String   @unique
+  reason    String // BOUNCED | COMPLAINED
+  createdAt DateTime @default(now())
+}
+
+model CertificateEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  orgId         String    @db.Uuid
+  campaignId    String    @db.Uuid
+  certificateId String    @db.Uuid
+  type          EventType
+  // share button clicked, or the ?s= source a view came from (whatsapp, facebook, x, ... or "direct")
+  platform      String
+  createdAt     DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, campaignId, type, platform])
+  @@index([certificateId])
+}
+
+// Webhook deliveries are de-duplicated by the provider's event id.
+model ProcessedWebhook {
+  id        String   @id
+  createdAt DateTime @default(now())
 }

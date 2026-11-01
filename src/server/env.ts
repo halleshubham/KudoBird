@@ -8,6 +8,7 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
   EMAIL_FROM: z.string().default("KudoBird <no-reply@localhost>"),
   SENTRY_DSN: z.string().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),

@@ -3,6 +3,7 @@ import IORedis from "ioredis";
 import { env } from "./env";
 
 export const RENDER_QUEUE = "render";
+export const EMAIL_QUEUE = "email";
 export interface RenderJob { certificateId: string; force?: boolean }
 
 let queue: Queue<RenderJob> | undefined;
@@ -27,8 +28,34 @@ export function renderQueue(): Queue<RenderJob> {
 export async function enqueueRender(certificateId: string, force = false): Promise<void> {
   try {
     // A unique job id per request when forcing, so a regenerate is not swallowed by a finished job.
-    await renderQueue().add("render", { certificateId, force }, { jobId: force ? `${certificateId}:${Date.now()}` : certificateId });
+    // (BullMQ forbids ":" in custom job ids.)
+    await renderQueue().add("render", { certificateId, force }, { jobId: force ? `${certificateId}-f${Date.now()}` : certificateId });
   } catch (e) {
     console.error("[queue] enqueue failed; sweeper will retry", e instanceof Error ? e.message : e);
+  }
+}
+
+export type EmailJob =
+  | { kind: "certificate"; id: string; force?: boolean } // id = certificate id
+  | { kind: "rejected"; id: string } // id = entry id
+  | { kind: "entry-notify"; id: string } // id = entry id
+  | { kind: "digest" };
+
+let emailQ: Queue<EmailJob> | undefined;
+export function emailQueue(): Queue<EmailJob> {
+  return (emailQ ??= new Queue<EmailJob>(EMAIL_QUEUE, {
+    connection: bullConnection(),
+    defaultJobOptions: { attempts: 4, backoff: { type: "exponential", delay: 10_000 }, removeOnComplete: 500, removeOnFail: 1000 },
+  }));
+}
+
+/** Never throws; contributor emails are re-discovered by the worker's sweeper if the queue was unavailable. */
+export async function enqueueEmail(job: EmailJob): Promise<void> {
+  try {
+    // BullMQ forbids ":" in custom job ids
+    const id = job.kind === "digest" ? undefined : `${job.kind}-${job.id}${"force" in job && job.force ? `-f${Date.now()}` : ""}`;
+    await emailQueue().add(job.kind, job, { jobId: id });
+  } catch (e) {
+    console.error("[queue] email enqueue failed", e instanceof Error ? e.message : e);
   }
 }

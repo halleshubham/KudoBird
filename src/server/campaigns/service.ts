@@ -13,7 +13,7 @@ import { getCaptcha } from "../security/captcha";
 import { checkOtpToken } from "../security/otp";
 import { rateLimit } from "../security/ratelimit";
 import { issueCertificateTx } from "../certificates/issue";
-import { enqueueRender } from "../queue";
+import { enqueueEmail, enqueueRender } from "../queue";
 import { maskEmail, maskMobile } from "./countries";
 import { fieldsSchema, parseFields, parseSettings, settingsSchema, type CampaignSettings, type FormField, type Locale } from "./schema";
 import { validateEntry } from "./validation";
@@ -257,6 +257,7 @@ export async function submitEntry(input: SubmitInput): Promise<SubmitResult> {
     throw e;
   }
   if (issued?.created) await enqueueRender(issued.id);
+  await enqueueEmail({ kind: "entry-notify", id: entry.id });
   return { ok: true, entryId: entry.id, status: entry.status, duplicate: false, certificateId: issued?.publicId };
 }
 
@@ -275,11 +276,13 @@ export async function listEntries(ctx: OrgContext, campaignId: string, opts: { q
       tx.entry.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((opts.page ?? 1) - 1) * pageSize, take: pageSize, include: { certificate: { select: { id: true, publicId: true, number: true, status: true, renderStatus: true } } } }),
       tx.entry.count({ where }),
     ]);
+    const logs = await tx.emailLog.findMany({ where: { orgId: ctx.orgId, entryId: { in: rows.map((r) => r.id) }, kind: { in: ["CERTIFICATE", "REJECTED"] } }, orderBy: { createdAt: "desc" } });
+    const emailStatus = (id: string) => logs.find((l) => l.entryId === id)?.status ?? null;
     // Contact details are masked in lists; reveal is a separate, audited action.
     return {
       total,
       rows: rows.map((r) => ({
-        id: r.id, name: r.name, status: r.status, createdAt: r.createdAt, customData: r.customData as Record<string, string>, certificate: r.certificate,
+        id: r.id, name: r.name, status: r.status, createdAt: r.createdAt, customData: r.customData as Record<string, string>, certificate: r.certificate, hasEmail: !!r.emailEnc, emailStatus: emailStatus(r.id),
         mobileMasked: maskMobile(decrypt(r.mobileEnc)), emailMasked: r.emailEnc ? maskEmail(decrypt(r.emailEnc)) : null,
       })),
     };
@@ -307,6 +310,7 @@ export async function reviewEntry(ctx: OrgContext, entryId: string, decision: "A
     return { entry: updated, issued };
   }).then(async ({ entry, issued }) => {
     if (issued?.created) await enqueueRender(issued.id);
+    if (decision === "REJECTED") await enqueueEmail({ kind: "rejected", id: entryId });
     return entry;
   });
 }

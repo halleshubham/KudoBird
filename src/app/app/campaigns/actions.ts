@@ -12,6 +12,7 @@ import {
 import { LOCALES, fieldsSchema, settingsSchema } from "@/server/campaigns/schema";
 import { PRESETS } from "@/server/render/presets";
 import { regenerateCertificate, restoreCertificate, revokeCertificate } from "@/server/certificates/issue";
+import { resendCertificateEmail } from "@/server/email/resend";
 import { requireOrg } from "@/server/session";
 
 type State = { error?: string; info?: string } | undefined;
@@ -66,6 +67,12 @@ export async function updateSettingsAction(_: State, fd: FormData): Promise<Stat
       consentRequired: bool(fd, "consentRequired"),
       wallEnabled: bool(fd, "wallEnabled"),
       consentText: { en: String(fd.get("consent_en") ?? "") || undefined, hi: String(fd.get("consent_hi") ?? "") || undefined, mr: String(fd.get("consent_mr") ?? "") || undefined },
+      email: {
+        certificateSubject: Object.fromEntries(LOCALES.map((l) => [l, String(fd.get(`certSubject_${l}`) ?? "") || undefined])),
+        certificateIntro: Object.fromEntries(LOCALES.map((l) => [l, String(fd.get(`certIntro_${l}`) ?? "") || undefined])),
+        rejectedSubject: current.email.rejectedSubject,
+        rejectedIntro: Object.fromEntries(LOCALES.map((l) => [l, String(fd.get(`rejIntro_${l}`) ?? "") || undefined])),
+      },
       shareText: String(fd.get("shareText") ?? current.shareText),
       hashtags: String(fd.get("hashtags") ?? "").split(/[\s,#]+/).filter(Boolean),
     });
@@ -132,5 +139,11 @@ export async function certificateAction(fd: FormData) {
   if (op === "regenerate") await regenerateCertificate(ctx, id, fd.get("latest") === "1");
   else if (op === "revoke") await revokeCertificate(ctx, id, String(fd.get("reason") ?? "") || undefined);
   else if (op === "restore") await restoreCertificate(ctx, id);
+  revalidatePath(`/app/campaigns/${String(fd.get("campaignId"))}/entries`);
+}
+
+export async function resendEmailAction(fd: FormData) {
+  const { ctx } = await requireOrg("entries.manage");
+  await resendCertificateEmail(ctx, String(fd.get("certificateId")));
   revalidatePath(`/app/campaigns/${String(fd.get("campaignId"))}/entries`);
 }

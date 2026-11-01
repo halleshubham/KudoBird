@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/server/queue", () => ({ enqueueRender: vi.fn(async () => {}), RENDER_QUEUE: "render", bullConnection: vi.fn(), renderQueue: vi.fn() }));
+vi.mock("@/server/queue", () => ({ enqueueRender: vi.fn(async () => {}), enqueueEmail: vi.fn(async () => {}), RENDER_QUEUE: "render", EMAIL_QUEUE: "email" }));
 
 import { prisma, withPlatform, withTenant } from "@/server/db";
 import { createCampaign, getCampaign, getTemplateDesign, reviewEntry, saveTemplateDesign, submitEntry, updateCampaign } from "@/server/campaigns/service";

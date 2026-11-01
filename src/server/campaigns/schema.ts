@@ -31,7 +31,18 @@ export const fieldsSchema = z.array(fieldSchema).max(15).superRefine((fields, ct
   });
 });
 
+const i18nText = (max: number) => z.object({ en: z.string().max(max).optional(), hi: z.string().max(max).optional(), mr: z.string().max(max).optional() }).default({});
+
+/** Per-campaign overrides for contributor emails; empty falls back to the built-in translations. Supports {{name}}, {{campaign}}, {{certificate_no}}, {{org}}. */
+export const emailTextsSchema = z.object({
+  certificateSubject: i18nText(150),
+  certificateIntro: i18nText(800),
+  rejectedSubject: i18nText(150),
+  rejectedIntro: i18nText(800),
+}).default({});
+
 export const settingsSchema = z.object({
+  email: emailTextsSchema,
   languages: z.array(z.enum(LOCALES)).min(1).default(["mr", "hi", "en"]),
   mobileCountry: z.string().length(2).default("IN"),
   duplicateMode: z.enum(["block", "allow", "return_existing"]).default("return_existing"),

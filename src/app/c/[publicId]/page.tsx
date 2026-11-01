@@ -3,11 +3,17 @@ import { notFound } from "next/navigation";
 import { getPublicCertificate } from "@/server/certificates/public";
 import { env } from "@/server/env";
 import { RenderProgress } from "./RenderProgress";
+import { ShareBar, ViewBeacon } from "./ShareBar";
+import { VIEW_SOURCES } from "@/server/certificates/events";
+import { replacePlaceholders } from "@/server/render/placeholders";
 
 const L = {
-  en: { valid: "Valid certificate", revoked: "This certificate has been revoked", number: "Certificate no.", issuedTo: "Issued to", by: "Issued by", campaign: "Campaign", date: "Issued on", working: "Preparing your certificate…", failed: "We could not prepare this certificate yet. Please check back shortly.", download: "Download", verify: "Verification" },
-  hi: { valid: "मान्य प्रमाणपत्र", revoked: "यह प्रमाणपत्र रद्द कर दिया गया है", number: "प्रमाणपत्र क्र.", issuedTo: "प्राप्तकर्ता", by: "जारीकर्ता", campaign: "अभियान", date: "जारी तिथि", working: "आपका प्रमाणपत्र तैयार हो रहा है…", failed: "प्रमाणपत्र अभी तैयार नहीं हो सका। कृपया थोड़ी देर बाद देखें।", download: "डाउनलोड", verify: "सत्यापन" },
-  mr: { valid: "वैध प्रमाणपत्र", revoked: "हे प्रमाणपत्र रद्द करण्यात आले आहे", number: "प्रमाणपत्र क्र.", issuedTo: "प्राप्तकर्ता", by: "जारीकर्ता", campaign: "मोहीम", date: "दिनांक", working: "तुमचे प्रमाणपत्र तयार होत आहे…", failed: "प्रमाणपत्र अजून तयार होऊ शकले नाही. कृपया थोड्या वेळाने पहा.", download: "डाउनलोड", verify: "पडताळणी" },
+  en: { valid: "Valid certificate", revoked: "This certificate has been revoked", number: "Certificate no.", issuedTo: "Issued to", by: "Issued by", campaign: "Campaign", date: "Issued on", working: "Preparing your certificate…", failed: "We could not prepare this certificate yet. Please check back shortly.", download: "Download", verify: "Verification",
+    share: "Share your certificate", native: "Share…", copy: "Copy link", copied: "Link copied ✓", instagram: "Instagram", instagramHint: "Image saved. Now open Instagram and post it from your gallery.", whatsapp: "WhatsApp", facebook: "Facebook", x: "X", linkedin: "LinkedIn", telegram: "Telegram" },
+  hi: { valid: "मान्य प्रमाणपत्र", revoked: "यह प्रमाणपत्र रद्द कर दिया गया है", number: "प्रमाणपत्र क्र.", issuedTo: "प्राप्तकर्ता", by: "जारीकर्ता", campaign: "अभियान", date: "जारी तिथि", working: "आपका प्रमाणपत्र तैयार हो रहा है…", failed: "प्रमाणपत्र अभी तैयार नहीं हो सका। कृपया थोड़ी देर बाद देखें।", download: "डाउनलोड", verify: "सत्यापन",
+    share: "अपना प्रमाणपत्र साझा करें", native: "साझा करें…", copy: "लिंक कॉपी करें", copied: "लिंक कॉपी हुआ ✓", instagram: "Instagram", instagramHint: "छवि सहेज ली गई है। अब Instagram खोलें और गैलरी से पोस्ट करें।", whatsapp: "WhatsApp", facebook: "Facebook", x: "X", linkedin: "LinkedIn", telegram: "Telegram" },
+  mr: { valid: "वैध प्रमाणपत्र", revoked: "हे प्रमाणपत्र रद्द करण्यात आले आहे", number: "प्रमाणपत्र क्र.", issuedTo: "प्राप्तकर्ता", by: "जारीकर्ता", campaign: "मोहीम", date: "दिनांक", working: "तुमचे प्रमाणपत्र तयार होत आहे…", failed: "प्रमाणपत्र अजून तयार होऊ शकले नाही. कृपया थोड्या वेळाने पहा.", download: "डाउनलोड", verify: "पडताळणी",
+    share: "तुमचे प्रमाणपत्र शेअर करा", native: "शेअर करा…", copy: "लिंक कॉपी करा", copied: "लिंक कॉपी केली ✓", instagram: "Instagram", instagramHint: "प्रतिमा सेव्ह झाली आहे. आता Instagram उघडा आणि गॅलरीतून पोस्ट करा.", whatsapp: "WhatsApp", facebook: "Facebook", x: "X", linkedin: "LinkedIn", telegram: "Telegram" },
 } as const;
 const lbl = (l: string) => L[(l in L ? l : "en") as keyof typeof L];
 const abs = (p: string) => new URL(p, env().APP_URL).toString();
@@ -27,12 +33,15 @@ export async function generateMetadata({ params }: { params: Promise<{ publicId:
   };
 }
 
-export default async function CertificatePage({ params }: { params: Promise<{ publicId: string }> }) {
+export default async function CertificatePage({ params, searchParams }: { params: Promise<{ publicId: string }>; searchParams: Promise<{ s?: string }> }) {
   const c = await getPublicCertificate((await params).publicId);
   if (!c) notFound();
+  const { s: src } = await searchParams;
+  const source = src && (VIEW_SOURCES as readonly string[]).includes(src) ? src : undefined;
   const t = lbl(c.locale);
   const ready = !!c.outputs.square;
   const revoked = c.status === "REVOKED";
+  const shareTemplate = replacePlaceholders(c.campaign.shareText.replaceAll("{{url}}", "\u0000URL\u0000"), { campaign: c.campaign.name, name: c.name, org: c.org.name }).replaceAll("\u0000URL\u0000", "{{url}}");
   return (
     <main lang={c.locale} className="mx-auto max-w-lg space-y-4 px-4 py-6" style={{ fontFamily: "system-ui, 'Noto Sans Devanagari', 'Mukta', sans-serif" }}>
       <p className={`rounded-md p-3 text-center font-semibold ${revoked ? "bg-red-50 text-red-800" : "bg-green-50 text-green-800"}`}>{revoked ? `✕ ${t.revoked}` : `✓ ${t.valid}`}</p>
@@ -47,6 +56,10 @@ export default async function CertificatePage({ params }: { params: Promise<{ pu
         <p><span className="text-gray-500">{t.by}:</span> {c.org.name}</p>
         <p><span className="text-gray-500">{t.date}:</span> {new Intl.DateTimeFormat(c.locale === "en" ? "en-IN" : `${c.locale}-IN`, { dateStyle: "long", timeZone: "Asia/Kolkata" }).format(c.issuedAt)}</p>
       </section>
+      <ViewBeacon publicId={c.publicId} source={source} />
+      {ready && !revoked && (
+        <ShareBar publicId={c.publicId} origin={env().APP_URL} template={shareTemplate} hashtags={c.campaign.hashtags} imageUrl={`/c/${c.publicId}/img/square?v=${c.outputs.square.hash}`} filename={`${c.number}.png`} labels={t} />
+      )}
       {ready && (
         <div className="flex flex-wrap gap-2 text-sm">
           {[["square", "PNG 1080×1080"], ["story", "Story 1080×1920"], ["a4", "A4 PNG"], ["pdf", "PDF"]].filter(([k]) => c.outputs[k]).map(([k, label]) => (

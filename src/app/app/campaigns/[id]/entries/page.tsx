@@ -3,7 +3,7 @@ import { getCampaign, listEntries } from "@/server/campaigns/service";
 import { can } from "@/server/permissions";
 import { requireOrg } from "@/server/session";
 import { EntryStatus } from "@prisma/client";
-import { certificateAction, reviewEntryAction } from "../../actions";
+import { certificateAction, resendEmailAction, reviewEntryAction } from "../../actions";
 
 export default async function Entries({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; status?: string; page?: string }> }) {
   const { id } = await params;
@@ -30,6 +30,14 @@ export default async function Entries({ params, searchParams }: { params: Promis
             <span className="min-w-40 flex-1 font-medium">{r.name}</span>
             <span className="text-gray-600">{r.mobileMasked}</span>
             <span className="text-gray-500">{r.emailMasked ?? "—"}</span>
+            {r.hasEmail && (
+              <span title="Email delivery status" className={`rounded px-2 py-0.5 text-xs ${r.emailStatus === "DELIVERED" ? "bg-green-100 text-green-800" : r.emailStatus === "BOUNCED" || r.emailStatus === "COMPLAINED" || r.emailStatus === "FAILED" ? "bg-red-100 text-red-800" : r.emailStatus === "SUPPRESSED" || r.emailStatus === "SKIPPED" ? "bg-amber-100 text-amber-900" : "bg-gray-100 text-gray-700"}`}>
+                email: {(r.emailStatus ?? "pending").toLowerCase()}
+              </span>
+            )}
+            {manage && r.certificate && r.hasEmail && r.certificate.renderStatus === "READY" && (
+              <form action={resendEmailAction}><input type="hidden" name="campaignId" value={id} /><input type="hidden" name="certificateId" value={r.certificate.id} /><button className="text-gray-700">Resend email</button></form>
+            )}
             <span className={`rounded px-2 py-0.5 text-xs ${r.status === "APPROVED" ? "bg-green-100 text-green-800" : r.status === "REJECTED" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900"}`}>{r.status.toLowerCase()}</span>
             {r.certificate && (
               <a href={`/c/${r.certificate.publicId}`} target="_blank" className="text-brand-700 underline">{r.certificate.number}</a>

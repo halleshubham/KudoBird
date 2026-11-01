@@ -3,7 +3,7 @@
 Multi-tenant platform for issuing contribution / participation certificates for any organisation, campaign or event.
 Free for now; plans, limits and feature flags are already wired through one entitlement service.
 
-> Status: **Stage 3 of 7** (rendering worker and certificate pages). See the roadmap at the bottom.
+> Status: **Stage 4 of 7** (sharing and Resend emails). Stages 5 to 7 are still to come. See the roadmap at the bottom.
 
 ## Stack
 
@@ -39,7 +39,7 @@ Without `RESEND_API_KEY`, emails are printed to the server console (verification
 | `APP_URL` | Public base URL, used in emailed links |
 | `AUTH_SECRET` | 32+ chars. Derives token hashing and PII encryption keys. **Rotating it invalidates sessions and encrypted data; back it up.** |
 | `GOOGLE_CLIENT_ID/SECRET` | Optional Google sign-in (redirect URI: `$APP_URL/auth/google/callback`) |
-| `RESEND_API_KEY`, `EMAIL_FROM` | Email delivery |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `RESEND_WEBHOOK_SECRET` | Email delivery and webhook verification |
 | `SENTRY_DSN` | Optional error monitoring |
 | `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile bot check on the public form. Unset = bot check is skipped (dev). **Set both in production.** |
 | `STORAGE_DRIVER` | `local` (default, `STORAGE_DIR`) or `s3` (`S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`; works with Cloudflare R2) |
@@ -121,6 +121,28 @@ with the embedded font and asserts shaping is active (output differs from unshap
 If your Playwright browser lives somewhere unusual set `CHROMIUM_PATH`. Docker: the `worker` image is built on the official Playwright image.
 Revoking a certificate re-renders it with a REVOKED stamp, and its `/c/{id}` page shows it as revoked.
 
+## Sharing and publicity
+
+`/c/{id}` carries Open Graph and Twitter Card tags (1200×630 image, absolute URLs, cache-busting hash) so WhatsApp, Facebook, X, LinkedIn and Telegram show the certificate when the link is pasted. The page is `noindex` and shows only name, number, campaign, org and date.
+Share buttons: native share (Web Share API **with the image file**, which is the route to Instagram and WhatsApp Status on phones), WhatsApp, Facebook, X, LinkedIn, Telegram, copy link, and Instagram (downloads the image and shows a "now post it" hint).
+Each button uses its own tracked link (`?s=whatsapp`, ...), so views are attributed to the platform that produced them. Share clicks and page views per platform appear on the campaign Overview; crawlers and link-preview bots are not counted.
+Share text and hashtags are set per campaign (`{{campaign}}`, `{{name}}`, `{{url}}`). Contributors can opt in to a public **wall of contributors** at `/o/{org}/{campaign}/wall` (names only, only for valid certificates).
+
+## Email (Resend)
+
+All mail goes through one module, `src/server/email`. Without `RESEND_API_KEY` it prints to the console. To use Resend:
+
+1. Create an account at resend.com and an **API key** (sending access). Put it in `RESEND_API_KEY`.
+2. **Domains -> Add domain** for your platform domain (for example `mail.yourplatform.com`), add the DNS records Resend shows (SPF, DKIM), wait for *Verified*.
+3. Set `EMAIL_FROM="KudoBird <certificates@mail.yourplatform.com>"`.
+4. **Webhooks -> Add endpoint**: URL `https://YOUR_APP_URL/api/webhooks/resend`, events `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`, `email.failed`. Copy the **signing secret** (`whsec_...`) into `RESEND_WEBHOOK_SECRET`. Without it the endpoint refuses all calls.
+5. Run the worker (`pnpm worker`). Email is sent from background jobs, never inside a web request.
+
+What is sent: account verification, magic link, password reset and member invites (immediate); the **certificate** to the contributor if they gave an email (PNG attached, link to the page, sent once the render finishes, sent only once unless someone clicks *Resend*); a rejection notice; and new-entry notifications to org members. Each member chooses **instant**, **daily digest (09:00 IST)** or **off** under *Settings -> Notifications*.
+Subject and intro text can be overridden per campaign in Marathi, Hindi and English (campaign Overview); otherwise built-in translations are used.
+Delivery status (sent, delivered, bounced, complained, ...) appears per entry. A **permanent bounce or a complaint suppresses that address platform-wide**, so no org can mail it again. Soft bounces are recorded but do not suppress.
+Contributor emails count against the plan's `emailsPerMonth`; the default sender is the platform domain. A plan-gated custom sender (`customEmailSender`, `Organization.emailFrom` + `emailDomainVerified`) is wired into sending, but the in-app domain verification screen is not built yet.
+
 ## Plans and entitlements
 
 `src/server/entitlements.ts` is the only place that decides whether an org may do something
@@ -149,7 +171,7 @@ Put the `web` service behind a TLS-terminating proxy (Caddy/nginx). Back up Post
 1. ✅ Auth, orgs, roles, tenancy
 2. ✅ Campaigns, public form, certificate designer
 3. ✅ Rendering worker and certificate pages
-4. Sharing and Resend emails (demo checkpoint)
+4. ✅ Sharing and Resend emails (demo checkpoint)
 5. Dashboard, bulk issue, audit log
 6. Super admin panel
 7. API, webhooks, embeds

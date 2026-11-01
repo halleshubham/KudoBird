@@ -4,7 +4,8 @@ import { Worker } from "bullmq";
 import { chromium, type Browser } from "playwright";
 import { withPlatform } from "../server/db";
 import { env } from "../server/env";
-import { bullConnection, enqueueRender, RENDER_QUEUE, type RenderJob } from "../server/queue";
+import { sendCertificateEmail, sendDailyDigests, sendRejectionEmail, notifyNewEntry } from "../server/email/notifications";
+import { bullConnection, EMAIL_QUEUE, emailQueue, enqueueEmail, enqueueRender, RENDER_QUEUE, type EmailJob, type RenderJob } from "../server/queue";
 import { markFailed, renderCertificate } from "./render";
 
 const CONCURRENCY = Number(process.env.RENDER_CONCURRENCY ?? 2);
@@ -26,6 +27,8 @@ const worker = new Worker<RenderJob>(
     try {
       await renderCertificate(await getBrowser(), job.data.certificateId, job.data.force);
       console.log(JSON.stringify({ level: "info", msg: "rendered", certificateId: job.data.certificateId, ms: Date.now() - t0 }));
+      // Deliver to the contributor now that the PNG exists (idempotent: no duplicate on regenerate).
+      await enqueueEmail({ kind: "certificate", id: job.data.certificateId });
     } catch (e) {
       const final = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
       console.error(JSON.stringify({ level: "error", msg: "render failed", certificateId: job.data.certificateId, attempt: job.attemptsMade + 1, error: e instanceof Error ? e.message : String(e) }));
@@ -35,6 +38,22 @@ const worker = new Worker<RenderJob>(
   },
   { connection: bullConnection(), concurrency: CONCURRENCY },
 );
+
+const emailWorker = new Worker<EmailJob>(
+  EMAIL_QUEUE,
+  async (job) => {
+    const d = job.data;
+    const result =
+      d.kind === "certificate" ? await sendCertificateEmail(d.id, d.force)
+      : d.kind === "rejected" ? await sendRejectionEmail(d.id)
+      : d.kind === "entry-notify" ? await notifyNewEntry(d.id)
+      : await sendDailyDigests();
+    console.log(JSON.stringify({ level: "info", msg: "email job", kind: d.kind, id: "id" in d ? d.id : undefined, result }));
+  },
+  { connection: bullConnection(), concurrency: 5 },
+);
+// 09:00 IST every day
+emailQueue().upsertJobScheduler("daily-digest", { pattern: "30 3 * * *" }, { name: "digest", data: { kind: "digest" } }).catch((e) => console.error("digest schedule failed", e));
 
 // Safety net: re-queue certificates stuck QUEUED/RENDERING (Redis outage at enqueue time, worker crash).
 async function sweep() {
@@ -49,12 +68,22 @@ async function sweep() {
     }),
   );
   for (const c of stale) await enqueueRender(c.id, false);
+  // Rendered certificates whose email was never attempted (e.g. Redis was down when the render finished).
+  const unsent = await withPlatform((tx) =>
+    tx.certificate.findMany({
+      where: { renderStatus: "READY", status: "ACTIVE", issuedAt: { gt: new Date(Date.now() - 3 * 86_400_000), lt: new Date(Date.now() - 120_000) }, entry: { emailEnc: { not: null } } },
+      select: { id: true }, take: 200,
+    }),
+  );
+  const tried = new Set((await withPlatform((tx) => tx.emailLog.findMany({ where: { certificateId: { in: unsent.map((u) => u.id) }, kind: "CERTIFICATE" }, select: { certificateId: true } }))).map((l) => l.certificateId));
+  for (const c of unsent) if (!tried.has(c.id)) await enqueueEmail({ kind: "certificate", id: c.id });
 }
 const timer = setInterval(() => sweep().catch((e) => console.error("sweep failed", e)), 60_000);
 
 async function shutdown() {
   clearInterval(timer);
   await worker.close();
+  await emailWorker.close();
   await browser?.close();
   process.exit(0);
 }

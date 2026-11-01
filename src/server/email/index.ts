@@ -7,12 +7,15 @@ export interface OutgoingEmail {
   to: string;
   subject: string;
   react: ReactElement;
+  /** Overrides the platform sender (plan-gated custom domain). */
+  from?: string;
+  replyTo?: string;
   attachments?: { filename: string; content: Buffer }[];
   tags?: Record<string, string>;
 }
 
 export interface EmailTransport {
-  send(msg: { from: string; to: string; subject: string; html: string; text: string; attachments?: OutgoingEmail["attachments"]; tags?: Record<string, string> }): Promise<{ id?: string }>;
+  send(msg: { from: string; replyTo?: string; to: string; subject: string; html: string; text: string; attachments?: OutgoingEmail["attachments"]; tags?: Record<string, string> }): Promise<{ id?: string }>;
 }
 
 class ResendTransport implements EmailTransport {
@@ -20,6 +23,7 @@ class ResendTransport implements EmailTransport {
   async send(msg: Parameters<EmailTransport["send"]>[0]) {
     const { data, error } = await this.client.emails.send({
       from: msg.from,
+      replyTo: msg.replyTo,
       to: msg.to,
       subject: msg.subject,
       html: msg.html,
@@ -56,5 +60,5 @@ export const consoleOutbox = () => ConsoleTransport.outbox;
 export async function sendEmail(msg: OutgoingEmail): Promise<{ id?: string }> {
   transport ??= env().RESEND_API_KEY ? new ResendTransport() : new ConsoleTransport();
   const [html, text] = await Promise.all([render(msg.react), render(msg.react, { plainText: true })]);
-  return transport.send({ from: env().EMAIL_FROM, to: msg.to, subject: msg.subject, html, text, attachments: msg.attachments, tags: msg.tags });
+  return transport.send({ from: msg.from ?? env().EMAIL_FROM, replyTo: msg.replyTo, to: msg.to, subject: msg.subject, html, text, attachments: msg.attachments, tags: msg.tags });
 }
