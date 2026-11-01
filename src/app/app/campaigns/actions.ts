@@ -11,6 +11,7 @@ import {
 } from "@/server/campaigns/service";
 import { LOCALES, fieldsSchema, settingsSchema } from "@/server/campaigns/schema";
 import { PRESETS } from "@/server/render/presets";
+import { regenerateCertificate, restoreCertificate, revokeCertificate } from "@/server/certificates/issue";
 import { requireOrg } from "@/server/session";
 
 type State = { error?: string; info?: string } | undefined;
@@ -122,4 +123,14 @@ export async function reviewEntryAction(fd: FormData) {
 export async function revealContactAction(entryId: string) {
   const { ctx } = await requireOrg("entries.view");
   return revealEntryContact(ctx, entryId);
+}
+
+export async function certificateAction(fd: FormData) {
+  const { ctx } = await requireOrg("entries.manage");
+  const id = String(fd.get("certificateId"));
+  const op = String(fd.get("op"));
+  if (op === "regenerate") await regenerateCertificate(ctx, id, fd.get("latest") === "1");
+  else if (op === "revoke") await revokeCertificate(ctx, id, String(fd.get("reason") ?? "") || undefined);
+  else if (op === "restore") await restoreCertificate(ctx, id);
+  revalidatePath(`/app/campaigns/${String(fd.get("campaignId"))}/entries`);
 }

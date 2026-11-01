@@ -1,0 +1,59 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { getPublicCertificate } from "@/server/certificates/public";
+import { env } from "@/server/env";
+import { RenderProgress } from "./RenderProgress";
+
+const L = {
+  en: { valid: "Valid certificate", revoked: "This certificate has been revoked", number: "Certificate no.", issuedTo: "Issued to", by: "Issued by", campaign: "Campaign", date: "Issued on", working: "Preparing your certificate…", failed: "We could not prepare this certificate yet. Please check back shortly.", download: "Download", verify: "Verification" },
+  hi: { valid: "मान्य प्रमाणपत्र", revoked: "यह प्रमाणपत्र रद्द कर दिया गया है", number: "प्रमाणपत्र क्र.", issuedTo: "प्राप्तकर्ता", by: "जारीकर्ता", campaign: "अभियान", date: "जारी तिथि", working: "आपका प्रमाणपत्र तैयार हो रहा है…", failed: "प्रमाणपत्र अभी तैयार नहीं हो सका। कृपया थोड़ी देर बाद देखें।", download: "डाउनलोड", verify: "सत्यापन" },
+  mr: { valid: "वैध प्रमाणपत्र", revoked: "हे प्रमाणपत्र रद्द करण्यात आले आहे", number: "प्रमाणपत्र क्र.", issuedTo: "प्राप्तकर्ता", by: "जारीकर्ता", campaign: "मोहीम", date: "दिनांक", working: "तुमचे प्रमाणपत्र तयार होत आहे…", failed: "प्रमाणपत्र अजून तयार होऊ शकले नाही. कृपया थोड्या वेळाने पहा.", download: "डाउनलोड", verify: "पडताळणी" },
+} as const;
+const lbl = (l: string) => L[(l in L ? l : "en") as keyof typeof L];
+const abs = (p: string) => new URL(p, env().APP_URL).toString();
+
+export async function generateMetadata({ params }: { params: Promise<{ publicId: string }> }): Promise<Metadata> {
+  const c = await getPublicCertificate((await params).publicId);
+  if (!c) return { title: "Certificate not found", robots: { index: false } };
+  const title = `${c.name} · ${c.campaign.name}`;
+  const description = `${lbl(c.locale).valid}: ${c.number} · ${c.org.name}`;
+  const hash = c.outputs.link?.hash;
+  const image = hash ? { url: abs(`/c/${c.publicId}/img/link?v=${hash}`), width: 1200, height: 630, alt: title } : undefined;
+  return {
+    title, description, robots: { index: false, follow: false },
+    alternates: { canonical: abs(`/c/${c.publicId}`) },
+    openGraph: { type: "website", url: abs(`/c/${c.publicId}`), title, description, siteName: c.org.name, images: image ? [image] : undefined },
+    twitter: { card: image ? "summary_large_image" : "summary", title, description, images: image ? [image.url] : undefined },
+  };
+}
+
+export default async function CertificatePage({ params }: { params: Promise<{ publicId: string }> }) {
+  const c = await getPublicCertificate((await params).publicId);
+  if (!c) notFound();
+  const t = lbl(c.locale);
+  const ready = !!c.outputs.square;
+  const revoked = c.status === "REVOKED";
+  return (
+    <main lang={c.locale} className="mx-auto max-w-lg space-y-4 px-4 py-6" style={{ fontFamily: "system-ui, 'Noto Sans Devanagari', 'Mukta', sans-serif" }}>
+      <p className={`rounded-md p-3 text-center font-semibold ${revoked ? "bg-red-50 text-red-800" : "bg-green-50 text-green-800"}`}>{revoked ? `✕ ${t.revoked}` : `✓ ${t.valid}`}</p>
+      {ready ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={`/c/${c.publicId}/img/square?v=${c.outputs.square.hash}`} alt={`${c.name} · ${c.number}`} width={1080} height={1080} className="w-full rounded-lg border bg-white shadow-sm" />
+      ) : <RenderProgress publicId={c.publicId} failed={c.renderStatus === "FAILED"} labels={{ working: t.working, failed: t.failed }} />}
+      <section aria-label={t.verify} className="card space-y-1 text-sm">
+        <p><span className="text-gray-500">{t.issuedTo}:</span> <strong>{c.name}</strong></p>
+        <p><span className="text-gray-500">{t.number}:</span> {c.number}</p>
+        <p><span className="text-gray-500">{t.campaign}:</span> {c.campaign.name}</p>
+        <p><span className="text-gray-500">{t.by}:</span> {c.org.name}</p>
+        <p><span className="text-gray-500">{t.date}:</span> {new Intl.DateTimeFormat(c.locale === "en" ? "en-IN" : `${c.locale}-IN`, { dateStyle: "long", timeZone: "Asia/Kolkata" }).format(c.issuedAt)}</p>
+      </section>
+      {ready && (
+        <div className="flex flex-wrap gap-2 text-sm">
+          {[["square", "PNG 1080×1080"], ["story", "Story 1080×1920"], ["a4", "A4 PNG"], ["pdf", "PDF"]].filter(([k]) => c.outputs[k]).map(([k, label]) => (
+            <a key={k} className="btn-ghost" href={`/c/${c.publicId}/img/${k}?download=1&v=${c.outputs[k].hash}`}>{t.download} {label}</a>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}

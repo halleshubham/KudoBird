@@ -8,6 +8,7 @@ export interface PublicState {
   ok?: boolean;
   status?: "PENDING" | "APPROVED" | "REJECTED";
   entryId?: string;
+  certificateId?: string;
   error?: string;
   errors?: Record<string, string>;
   values?: Record<string, string>;
@@ -26,7 +27,7 @@ export async function submitPublicAction(_: PublicState | undefined, fd: FormDat
     orgSlug: String(fd.get("org")), campaignSlug: String(fd.get("campaign")), raw, locale,
     ip: await clientIp(), captchaToken: raw["cf-turnstile-response"], otpToken: raw.otpToken,
   });
-  if (res.ok) return { ok: true, status: res.status, entryId: res.entryId };
+  if (res.ok) return { ok: true, status: res.status, entryId: res.entryId, certificateId: res.certificateId };
   const base = { values: raw };
   switch (res.code) {
     case "VALIDATION": return { ...base, errors: res.errors };
@@ -34,7 +35,7 @@ export async function submitPublicAction(_: PublicState | undefined, fd: FormDat
     case "CAPTCHA": return { ...base, error: m.errCaptcha };
     case "RATE": return { ...base, error: m.errRate };
     case "OTP": return { ...base, error: m.errOtp };
-    case "CLOSED": case "NOT_FOUND": return { ...base, error: m.errClosed };
+    case "CLOSED": case "NOT_FOUND": case "LIMIT": return { ...base, error: m.errClosed };
   }
 }
 

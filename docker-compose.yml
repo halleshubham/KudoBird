@@ -18,17 +18,28 @@ services:
     ports: ["6379:6379"]
     volumes: [redisdata:/data]
   web:
-    build: .
+    build: { context: ., target: web }
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
     env_file: .env
-    environment:
+    environment: &appenv
       DATABASE_URL: postgresql://kudobird_app:kudobird_app@postgres:5432/kudobird
       DIRECT_URL: postgresql://kudobird:kudobird@postgres:5432/kudobird
       REDIS_URL: redis://redis:6379
+    volumes: ["appdata:/data"]
     ports: ["3000:3000"]
     command: sh -c "pnpm exec prisma migrate deploy && node server.js"
+  worker:
+    build: { context: ., target: worker }
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    env_file: .env
+    environment: *appenv
+    volumes: ["appdata:/data"]
+    restart: unless-stopped
 volumes:
   pgdata:
   redisdata:
+  appdata:

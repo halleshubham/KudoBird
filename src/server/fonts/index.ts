@@ -88,7 +88,8 @@ export async function ensureFont(family: string, weights: number[] = DEFAULT_WEI
   const existing = (await readManifest(dir, family)) ?? { family, faces: [] };
   const wanted = [...new Set([...weights, ...(existing.requested ?? []), ...existing.faces.map((f) => f.weight)])].sort((a, b) => a - b);
   let css = "";
-  for (const set of [wanted, [400]]) {
+  // Not every family has every weight; fall back to the default pair, then regular only.
+  for (const set of [wanted, DEFAULT_WEIGHTS, [400]]) {
     const res = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@${set.join(";")}&display=swap`, { headers: { "user-agent": UA } });
     if (res.ok) { css = await res.text(); break; }
   }

@@ -3,7 +3,7 @@
 Multi-tenant platform for issuing contribution / participation certificates for any organisation, campaign or event.
 Free for now; plans, limits and feature flags are already wired through one entitlement service.
 
-> Status: **Stage 2 of 7** (campaigns, public form, certificate designer). See the roadmap at the bottom.
+> Status: **Stage 3 of 7** (rendering worker and certificate pages). See the roadmap at the bottom.
 
 ## Stack
 
@@ -21,6 +21,7 @@ pnpm exec prisma migrate deploy
 pnpm db:seed                  # Free plan, starter templates, super admin, demo org + Marathi campaign
 pnpm fonts:sync               # optional: import the full Google Fonts catalogue (needs internet once)
 pnpm dev                      # http://localhost:3000
+pnpm worker                   # in a second terminal: renders certificates (needs Redis + Chromium)
 ```
 
 Without Docker, create the roles yourself (see `docker/init-roles.sql`): `kudobird` (owner, used for migrations) and
@@ -96,6 +97,30 @@ Bundled in `assets/fonts` (works offline): **Noto Serif Devanagari** (default), 
 `pnpm fonts:sync` imports the Google Fonts catalogue (about 1,900 families, no API key needed) so the designer can search all of it, filter by script, and shows a curated shortlist first.
 A font used by a template is downloaded once into `FONT_CACHE_DIR`, and rendering embeds it from disk. It never depends on a live network call.
 
+## Rendering pipeline
+
+Issuing a certificate (instantly, or on approval) writes a `Certificate` row with a number like `SJA-2026-00042`
+(atomic per-campaign counter, configurable prefix), an unguessable 128-bit public id, a snapshot of what is printed on it
+(name, campaign, date and fields flagged "show on certificate", **never mobile or email**), and the exact template version used.
+It then queues a BullMQ job. The **worker** (`pnpm worker`) keeps one headless Chromium (Playwright) alive, opens an isolated network-less
+context per render, waits for embedded fonts to decode, and writes PNG/PDF outputs to storage as each completes:
+
+| Output | Size |
+|---|---|
+| `square` | 1080×1080 (Instagram / WhatsApp) |
+| `story` | 1080×1920 (Stories / Status) |
+| `link` | 1200×630 (Facebook / X / LinkedIn preview) |
+| `a4` / `pdf` | A4 landscape PNG (1754×1240) and one-page PDF |
+
+Outputs are cached by a content hash (design + data + size + revoked state), so retries and regenerate are cheap. The page at `/c/{id}`
+shows a progress state and swaps to the image when ready. If Redis is down when a certificate is issued it stays `QUEUED` and the
+worker's sweeper re-queues it. `pnpm certificates:backfill` issues certificates for approved entries that predate this stage.
+
+Chromium shapes Devanagari with HarfBuzz; `tests/rendering.test.ts` renders `बळीराजाची दिवाळी`, `दुष्काळग्रस्त`, `क्ष्म्य`, `श्री`, `र्‍य`
+with the embedded font and asserts shaping is active (output differs from unshaped, conjuncts are narrower) plus golden images.
+If your Playwright browser lives somewhere unusual set `CHROMIUM_PATH`. Docker: the `worker` image is built on the official Playwright image.
+Revoking a certificate re-renders it with a REVOKED stamp, and its `/c/{id}` page shows it as revoked.
+
 ## Plans and entitlements
 
 `src/server/entitlements.ts` is the only place that decides whether an org may do something
@@ -123,7 +148,7 @@ Put the `web` service behind a TLS-terminating proxy (Caddy/nginx). Back up Post
 
 1. ✅ Auth, orgs, roles, tenancy
 2. ✅ Campaigns, public form, certificate designer
-3. Rendering worker and certificate pages
+3. ✅ Rendering worker and certificate pages
 4. Sharing and Resend emails (demo checkpoint)
 5. Dashboard, bulk issue, audit log
 6. Super admin panel

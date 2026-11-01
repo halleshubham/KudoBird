@@ -3,7 +3,7 @@ import { getCampaign, listEntries } from "@/server/campaigns/service";
 import { can } from "@/server/permissions";
 import { requireOrg } from "@/server/session";
 import { EntryStatus } from "@prisma/client";
-import { reviewEntryAction } from "../../actions";
+import { certificateAction, reviewEntryAction } from "../../actions";
 
 export default async function Entries({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; status?: string; page?: string }> }) {
   const { id } = await params;
@@ -31,6 +31,20 @@ export default async function Entries({ params, searchParams }: { params: Promis
             <span className="text-gray-600">{r.mobileMasked}</span>
             <span className="text-gray-500">{r.emailMasked ?? "—"}</span>
             <span className={`rounded px-2 py-0.5 text-xs ${r.status === "APPROVED" ? "bg-green-100 text-green-800" : r.status === "REJECTED" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900"}`}>{r.status.toLowerCase()}</span>
+            {r.certificate && (
+              <a href={`/c/${r.certificate.publicId}`} target="_blank" className="text-brand-700 underline">{r.certificate.number}</a>
+            )}
+            {r.certificate?.status === "REVOKED" && <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">revoked</span>}
+            {r.certificate && r.certificate.renderStatus !== "READY" && <span className="text-xs text-gray-500">{r.certificate.renderStatus.toLowerCase()}</span>}
+            {manage && r.certificate && (
+              <form action={certificateAction} className="flex items-center gap-2">
+                <input type="hidden" name="campaignId" value={id} /><input type="hidden" name="certificateId" value={r.certificate.id} />
+                <label className="flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" name="latest" value="1" /> latest design</label><button name="op" value="regenerate" className="text-gray-700">Regenerate</button>
+                {r.certificate.status === "ACTIVE"
+                  ? <><input name="reason" placeholder="Revoke reason" className="input !w-28 !py-1" /><button name="op" value="revoke" className="text-red-600">Revoke</button></>
+                  : <button name="op" value="restore" className="text-green-700">Restore</button>}
+              </form>
+            )}
             {manage && r.status !== "APPROVED" && (
               <form action={reviewEntryAction}><input type="hidden" name="campaignId" value={id} /><input type="hidden" name="entryId" value={r.id} /><button name="decision" value="APPROVED" className="text-green-700">Approve</button></form>
             )}

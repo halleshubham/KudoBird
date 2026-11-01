@@ -40,6 +40,18 @@ enum EntryStatus {
   REJECTED
 }
 
+enum CertificateStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum RenderStatus {
+  QUEUED
+  RENDERING
+  READY
+  FAILED
+}
+
 enum AssetKind {
   LOGO
   SIGNATURE
@@ -155,6 +167,7 @@ model Organization {
   signatories   Signatory[]
   assets        Asset[]
   entries       Entry[]
+  certificates  Certificate[]
 }
 
 model Membership {
@@ -329,8 +342,9 @@ model Campaign {
 
   org         Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   template    Template?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  signatories CampaignSignatory[]
-  entries     Entry[]
+  signatories  CampaignSignatory[]
+  entries      Entry[]
+  certificates Certificate[]
 
   @@unique([orgId, slug])
 }
@@ -368,9 +382,41 @@ model Entry {
   reviewedById String?     @db.Uuid
   reviewedAt   DateTime?
 
-  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  campaign Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  campaign    Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  certificate Certificate?
 
   @@index([campaignId, mobileHash])
   @@index([orgId, createdAt])
+}
+
+// One certificate per entry. Holds a snapshot of everything rendered on it
+// (never mobile or email) plus the exact template version used.
+model Certificate {
+  id                String            @id @default(uuid()) @db.Uuid
+  // Non-guessable public identifier used in /c/{publicId}
+  publicId          String            @unique
+  orgId             String            @db.Uuid
+  campaignId        String            @db.Uuid
+  entryId           String            @unique @db.Uuid
+  seq               Int
+  number            String // e.g. SJA-2026-00042
+  templateVersionId String            @db.Uuid
+  renderData        Json // { name, campaign, org, date, ...custom fields shown on certificate }
+  locale            String            @default("en")
+  status            CertificateStatus @default(ACTIVE)
+  revokedAt         DateTime?
+  revokeReason      String?
+  renderStatus      RenderStatus      @default(QUEUED)
+  renderError       String?
+  // { square: { key, hash, mime }, story: ..., link: ..., a4: ..., a4pdf: ... }
+  outputs           Json              @default("{}")
+  issuedAt          DateTime          @default(now())
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  campaign Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  entry    Entry        @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, number])
+  @@index([orgId, issuedAt])
 }

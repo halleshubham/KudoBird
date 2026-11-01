@@ -23,7 +23,7 @@ export function PublicForm(p: {
     return (
       <div className="space-y-3 text-center" role="status">
         <h2 className="text-xl font-bold">{m.thanksTitle}</h2>
-        {state.status === "PENDING" ? <p>{m.thanksPending}</p> : <p><a className="btn" href={`/c/entry/${state.entryId}`}>{m.viewCertificate}</a></p>}
+        {state.status === "PENDING" ? <p>{m.thanksPending}</p> : <p><a className="inline-block rounded-md px-4 py-3 font-semibold text-white" style={{ background: p.accent }} href={`/c/${state.certificateId}`}>{m.viewCertificate}</a></p>}
       </div>
     );
   }

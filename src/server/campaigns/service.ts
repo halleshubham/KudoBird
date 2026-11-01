@@ -3,7 +3,7 @@ import { Prisma, type EntryStatus } from "@prisma/client";
 import { audit } from "../audit";
 import { blindIndex, decrypt, encrypt, sha256 } from "../crypto";
 import { withPlatform, withTenant } from "../db";
-import { assertWithinLimit } from "../entitlements";
+import { assertWithinLimit, EntitlementError } from "../entitlements";
 import { OrgError, type OrgContext } from "../orgs";
 import { assertCan } from "../permissions";
 import { presetDesign, type Preset } from "../render/presets";
@@ -12,6 +12,8 @@ import { slugify } from "../slug";
 import { getCaptcha } from "../security/captcha";
 import { checkOtpToken } from "../security/otp";
 import { rateLimit } from "../security/ratelimit";
+import { issueCertificateTx } from "../certificates/issue";
+import { enqueueRender } from "../queue";
 import { maskEmail, maskMobile } from "./countries";
 import { fieldsSchema, parseFields, parseSettings, settingsSchema, type CampaignSettings, type FormField, type Locale } from "./schema";
 import { validateEntry } from "./validation";
@@ -184,8 +186,8 @@ export async function deleteSignatory(ctx: OrgContext, id: string) {
 // ------------------------------------------------------------------ public submission
 
 export type SubmitResult =
-  | { ok: true; entryId: string; status: EntryStatus; duplicate: boolean }
-  | { ok: false; code: "NOT_FOUND" | "CLOSED" | "VALIDATION" | "DUPLICATE" | "CAPTCHA" | "RATE" | "OTP"; errors?: Record<string, string> };
+  | { ok: true; entryId: string; status: EntryStatus; duplicate: boolean; certificateId?: string }
+  | { ok: false; code: "NOT_FOUND" | "CLOSED" | "VALIDATION" | "DUPLICATE" | "CAPTCHA" | "RATE" | "OTP" | "LIMIT"; errors?: Record<string, string> };
 
 export interface SubmitInput {
   orgSlug: string;
@@ -225,11 +227,18 @@ export async function submitEntry(input: SubmitInput): Promise<SubmitResult> {
   const mobileHash = blindIndex(e.mobile, campaign.id);
   const existing = await withPlatform((tx) => tx.entry.findFirst({ where: { campaignId: campaign.id, mobileHash }, orderBy: { createdAt: "asc" } }));
   if (existing && settings.duplicateMode === "block") return { ok: false, code: "DUPLICATE" };
-  if (existing && settings.duplicateMode === "return_existing") return { ok: true, entryId: existing.id, status: existing.status, duplicate: true };
+  if (existing && settings.duplicateMode === "return_existing") {
+    const cert = await withPlatform((tx) => tx.certificate.findUnique({ where: { entryId: existing.id }, select: { publicId: true } }));
+    return { ok: true, entryId: existing.id, status: existing.status, duplicate: true, certificateId: cert?.publicId };
+  }
 
   const status: EntryStatus = settings.approvalMode ? "PENDING" : "APPROVED";
   const consentText = settings.consentText[input.locale as Locale] ?? null;
-  const entry = await withPlatform(async (tx) => {
+  // Entry and certificate commit together, so an entry is never left approved-but-unnumbered.
+  let issued: { id: string; publicId: string; created: boolean } | undefined;
+  let entry;
+  try {
+    entry = await withPlatform(async (tx) => {
     const created = await tx.entry.create({
       data: {
         orgId: campaign.orgId, campaignId: campaign.id, name: e.name,
@@ -240,9 +249,15 @@ export async function submitEntry(input: SubmitInput): Promise<SubmitResult> {
       },
     });
     await audit(tx, { orgId: campaign.orgId, action: "entry.created", entity: "Entry", entityId: created.id, meta: { campaignId: campaign.id, status } });
+    if (status === "APPROVED") issued = await issueCertificateTx(tx, created.id);
     return created;
-  });
-  return { ok: true, entryId: entry.id, status: entry.status, duplicate: false };
+    });
+  } catch (e) {
+    if (e instanceof EntitlementError) return { ok: false, code: "LIMIT" };
+    throw e;
+  }
+  if (issued?.created) await enqueueRender(issued.id);
+  return { ok: true, entryId: entry.id, status: entry.status, duplicate: false, certificateId: issued?.publicId };
 }
 
 // ------------------------------------------------------------------ entries (org side)
@@ -257,14 +272,14 @@ export async function listEntries(ctx: OrgContext, campaignId: string, opts: { q
   };
   return withTenant(ctx, async (tx) => {
     const [rows, total] = await Promise.all([
-      tx.entry.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((opts.page ?? 1) - 1) * pageSize, take: pageSize }),
+      tx.entry.findMany({ where, orderBy: { createdAt: "desc" }, skip: ((opts.page ?? 1) - 1) * pageSize, take: pageSize, include: { certificate: { select: { id: true, publicId: true, number: true, status: true, renderStatus: true } } } }),
       tx.entry.count({ where }),
     ]);
     // Contact details are masked in lists; reveal is a separate, audited action.
     return {
       total,
       rows: rows.map((r) => ({
-        id: r.id, name: r.name, status: r.status, createdAt: r.createdAt, customData: r.customData as Record<string, string>,
+        id: r.id, name: r.name, status: r.status, createdAt: r.createdAt, customData: r.customData as Record<string, string>, certificate: r.certificate,
         mobileMasked: maskMobile(decrypt(r.mobileEnc)), emailMasked: r.emailEnc ? maskEmail(decrypt(r.emailEnc)) : null,
       })),
     };
@@ -288,7 +303,11 @@ export async function reviewEntry(ctx: OrgContext, entryId: string, decision: "A
     if (!r) throw new OrgError("NOT_FOUND", "Entry not found");
     const updated = await tx.entry.update({ where: { id: entryId }, data: { status: decision, reviewedById: ctx.userId, reviewedAt: new Date() } });
     await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: decision === "APPROVED" ? "entry.approved" : "entry.rejected", entity: "Entry", entityId: entryId });
-    return updated;
+    const issued = decision === "APPROVED" ? await issueCertificateTx(tx, entryId) : null;
+    return { entry: updated, issued };
+  }).then(async ({ entry, issued }) => {
+    if (issued?.created) await enqueueRender(issued.id);
+    return entry;
   });
 }
 
