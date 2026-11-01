@@ -210,15 +210,36 @@ pnpm test        # needs the database from above
 pnpm typecheck
 ```
 
-## Deploying
+## Container images and deployment
+
+**Images** (public, linux/amd64) are built by GitHub Actions (`.github/workflows/ci.yml`) on every push, **only after** the typecheck and the full test suite pass against real Postgres and Redis:
+
+| Image | Contents |
+|---|---|
+| `ghcr.io/halleshubham/kudobird-web` | The Next.js app. On start it runs `scripts/bootstrap.ts`: waits for Postgres, creates/refreshes the restricted application role, runs migrations, loads reference data (Free plan, bundled fonts, starter templates) and **refuses to start if the application role could bypass Row Level Security**. |
+| `ghcr.io/halleshubham/kudobird-worker` | The background worker with headless Chromium (renders certificates, sends email, delivers webhooks, retention, digests). |
+
+Tags: `sha-<short commit>` (immutable, use this for deployments), the branch name, `v*` release tags, and `latest` (default branch only). Packages are private by default on GitHub: after the first publish, open each package (Profile > Packages > kudobird-web / kudobird-worker > Package settings) and set the visibility to **Public** so servers can pull without credentials.
+
+**Deploy with Coolify (or any Docker host).** `deploy/docker-compose.coolify.yml` is the whole production stack: Postgres, Redis, web, worker and a nightly backup job. Web and worker share one `/data` volume (uploads, rendered certificates, font cache), which is why they must run in the same stack unless you switch to S3-compatible storage (`STORAGE_DRIVER=s3`).
+
+1. In Coolify create a *Docker Compose* service from that file, point the domain at the **web** service on port **3000**, and set the variables listed at the top of the file. Generate long random values for `AUTH_SECRET`, `POSTGRES_PASSWORD`, `APP_DB_PASSWORD` and `REDIS_PASSWORD`.
+2. Set `IMAGE_TAG` to the commit you want (for example `sha-1a2b3c4`) and deploy. The first start takes a minute or two (the database is created and migrated).
+3. **Back up `AUTH_SECRET` somewhere safe.** It derives the keys that encrypt contact details; if it is lost those details cannot be read.
+4. Create the first platform admin from the web container's terminal: `node_modules/.bin/tsx scripts/create-super-admin.ts you@example.org 'a long password'`. You are asked to set up 2FA at first sign-in.
+5. Add `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` (see *Email*) so verification links, certificates and notifications are actually emailed; without a key they are only printed in the container log. Add `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` to protect the public form from bots. Without them there is no bot protection.
+
+**Updating:** change `IMAGE_TAG` and redeploy. Migrations run automatically and are additive. To roll back, set the previous tag (migrations that already ran stay applied, so keep migrations backward compatible).
+
+**Backups.** The `backup` service writes a compressed `pg_dump` every night into the `backups` volume (7 daily, 4 weekly, 6 monthly kept). That volume lives on the same server, so also copy it elsewhere (for example a scheduled `rclone`/`rsync` of the volume, or Coolify's S3 backup destination), and test a restore:
 
 ```bash
-cp .env.example .env   # set strong secrets and real URLs
-docker compose up -d --build
+gunzip -c /backups/last/kudobird-latest.sql.gz | psql "$DIRECT_URL"   # into an empty database
 ```
 
-Put the `web` service behind a TLS-terminating proxy (Caddy/nginx). Back up Postgres with `pg_dump` on a schedule
-(e.g. `pg_dump -Fc "$DIRECT_URL" > kudobird-$(date +%F).dump`) and store dumps off-server.
+Also back up the `appdata` volume (rendered certificates and uploads) if you cannot afford to re-render; or use S3-compatible storage with its own versioning.
+
+**Local containers:** `docker compose up -d postgres redis` for just the databases, or `docker compose --profile app up --build` to run the same web and worker containers locally.
 
 ## Roadmap
 
