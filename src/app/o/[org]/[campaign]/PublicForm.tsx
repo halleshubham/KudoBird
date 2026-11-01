@@ -8,7 +8,7 @@ export interface PublicField { key: string; label: string; type: string; require
 
 export function PublicForm(p: {
   org: string; campaign: string; lang: string; fields: PublicField[]; dial: string; otp: boolean; consentRequired: boolean; consentText: string; purposeText: string;
-  wall: boolean; captchaSiteKey?: string; accent: string;
+  wall: boolean; captchaSiteKey?: string; accent: string; linkTarget?: "_blank";
 }) {
   const m = MESSAGES[p.lang as keyof typeof MESSAGES] ?? MESSAGES.en;
   const [state, action, pending] = useActionState<PublicState | undefined, FormData>(submitPublicAction, undefined);
@@ -23,7 +23,7 @@ export function PublicForm(p: {
     return (
       <div className="space-y-3 text-center" role="status">
         <h2 className="text-xl font-bold">{m.thanksTitle}</h2>
-        {state.status === "PENDING" ? <p>{m.thanksPending}</p> : <p><a className="inline-block rounded-md px-4 py-3 font-semibold text-white" style={{ background: p.accent }} href={`/c/${state.certificateId}`}>{m.viewCertificate}</a></p>}
+        {state.status === "PENDING" ? <p>{m.thanksPending}</p> : <p><a className="inline-block rounded-md px-4 py-3 font-semibold text-white" style={{ background: p.accent }} href={`/c/${state.certificateId}`} target={p.linkTarget} rel={p.linkTarget ? "noopener" : undefined}>{m.viewCertificate}</a></p>}
       </div>
     );
   }

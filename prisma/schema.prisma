@@ -64,6 +64,7 @@ enum EmailKind {
   ADMIN_ENTRY
   ADMIN_DIGEST
   SUPPORT_ACCESS
+  WEBHOOK_ALERT
 }
 
 enum EmailStatus {
@@ -76,6 +77,13 @@ enum EmailStatus {
   FAILED
   SUPPRESSED
   SKIPPED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  DEAD
 }
 
 enum EventType {
@@ -206,6 +214,9 @@ model Organization {
   emailLogs     EmailLog[]
   events        CertificateEvent[]
   impersonations ImpersonationLog[]
+  apiKeys       ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
+  webhookDeliveries WebhookDelivery[]
 }
 
 model Membership {
@@ -539,4 +550,68 @@ model PlatformAudit {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// Org-scoped API key. Only a keyed hash is stored; the full key is shown once at creation.
+// Format: kb_<prefix>_<secret>. `prefix` is public (shown in the UI, used for lookup).
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @db.Uuid
+  name        String
+  prefix      String    @unique
+  keyHash     String
+  // read: list/get campaigns, entries, certificates.  write: create entries, revoke.  pii: include mobile and email.
+  scopes      String[]
+  createdById String    @db.Uuid
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model WebhookEndpoint {
+  id                  String    @id @default(uuid()) @db.Uuid
+  orgId               String    @db.Uuid
+  url                 String
+  description         String?
+  secretEnc           String // signing secret, AES-GCM encrypted
+  events              String[]
+  // Opt-in: include mobile/email in payloads (off by default)
+  includePii          Boolean   @default(false)
+  active              Boolean   @default(true)
+  consecutiveFailures Int       @default(0)
+  disabledAt          DateTime?
+  disabledReason      String?
+  createdAt           DateTime  @default(now())
+
+  org        Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([orgId])
+}
+
+// Outbox: rows are written in the same transaction as the change that caused them, so an event can never be lost.
+model WebhookDelivery {
+  id             String         @id @default(uuid()) @db.Uuid
+  orgId          String         @db.Uuid
+  endpointId     String         @db.Uuid
+  event          String
+  payload        Json
+  status         DeliveryStatus @default(PENDING)
+  attempts       Int            @default(0)
+  nextAttemptAt  DateTime       @default(now())
+  lastStatusCode Int?
+  lastError      String?
+  createdAt      DateTime       @default(now())
+  deliveredAt    DateTime?
+
+  org      Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt])
 }

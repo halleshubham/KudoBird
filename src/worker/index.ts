@@ -7,6 +7,7 @@ import { env } from "../server/env";
 import { sendCertificateEmail, sendDailyDigests, sendRejectionEmail, notifyNewEntry } from "../server/email/notifications";
 import { bullConnection, EMAIL_QUEUE, emailQueue, enqueueEmail, enqueueRender, RENDER_QUEUE, type EmailJob, type RenderJob } from "../server/queue";
 import { purgeExpired } from "../server/privacy";
+import { processDueDeliveries } from "../server/webhooks";
 import { markFailed, renderCertificate } from "./render";
 
 const CONCURRENCY = Number(process.env.RENDER_CONCURRENCY ?? 2);
@@ -59,6 +60,14 @@ emailQueue().upsertJobScheduler("daily-digest", { pattern: "30 3 * * *" }, { nam
 
 emailQueue().upsertJobScheduler("retention", { pattern: "0 21 * * *" }, { name: "retention", data: { kind: "retention" } }).catch((e) => console.error("retention schedule failed", e));
 
+// Webhooks: poll the outbox every few seconds (claims rows with a lease, so several workers are safe).
+let webhookBusy = false;
+const webhookTimer = setInterval(() => {
+  if (webhookBusy) return;
+  webhookBusy = true;
+  processDueDeliveries().catch((e) => console.error("webhook processing failed", e)).finally(() => { webhookBusy = false; });
+}, 5_000);
+
 // Safety net: re-queue certificates stuck QUEUED/RENDERING (Redis outage at enqueue time, worker crash).
 async function sweep() {
   const stale = await withPlatform((tx) =>
@@ -86,6 +95,7 @@ const timer = setInterval(() => sweep().catch((e) => console.error("sweep failed
 
 async function shutdown() {
   clearInterval(timer);
+  clearInterval(webhookTimer);
   await worker.close();
   await emailWorker.close();
   await browser?.close();

@@ -41,8 +41,22 @@ export const emailTextsSchema = z.object({
   rejectedIntro: i18nText(800),
 }).default({});
 
+/** An allowed embedding site: scheme + host (+ port) only. http is accepted for localhost, for development. */
+export function normalizeOrigin(raw: string): string {
+  let u: URL;
+  try { u = new URL(raw.trim()); } catch { throw new Error(`"${raw.trim()}" is not a valid website address`); }
+  const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  if (!(u.protocol === "https:" || (u.protocol === "http:" && local))) throw new Error(`"${raw.trim()}" must start with https://`);
+  if (u.username || u.password || (u.pathname !== "/" && u.pathname !== "") || u.search || u.hash) throw new Error(`Use only the site address, without a path: ${u.origin}`);
+  if (u.hostname.includes("*")) throw new Error("Wildcards are not allowed");
+  return u.origin;
+}
+const originSchema = z.string().transform((v, ctx) => { try { return normalizeOrigin(v); } catch (e) { ctx.addIssue({ code: "custom", message: (e as Error).message }); return z.NEVER; } });
+
 export const settingsSchema = z.object({
   email: emailTextsSchema,
+  /** Websites allowed to show this campaign's form in an iframe. Empty = embedding is off. */
+  embedOrigins: z.array(originSchema).max(10).default([]),
   languages: z.array(z.enum(LOCALES)).min(1).default(["mr", "hi", "en"]),
   mobileCountry: z.string().length(2).default("IN"),
   duplicateMode: z.enum(["block", "allow", "return_existing"]).default("return_existing"),

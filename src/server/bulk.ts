@@ -7,6 +7,8 @@ import { parseCsv, toCsv } from "./csv";
 import { OrgError, type OrgContext } from "./orgs";
 import { assertCan } from "./permissions";
 import { enqueueRender } from "./queue";
+import { entryPayload } from "./webhook-payloads";
+import { queueWebhookEventTx } from "./webhooks";
 import { parseFields, parseSettings, type FormField } from "./campaigns/schema";
 import { validateEntry } from "./campaigns/validation";
 
@@ -125,6 +127,7 @@ export async function commitBulk(ctx: OrgContext, campaignId: string, text: stri
               reviewedById: ctx.userId, reviewedAt: new Date(),
             },
           });
+          await queueWebhookEventTx(tx, ctx.orgId, "entry.created", async (pii) => entryPayload(entry, r.campaign.name, pii));
           const cert = await issueCertificateTx(tx, entry.id);
           if (row.email && !opts.sendEmails) {
             // Recorded as SKIPPED so the automatic post-render email does not fire; a manual "Resend email" still works.

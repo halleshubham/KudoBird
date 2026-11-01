@@ -6,6 +6,8 @@ import { OrgError, type OrgContext } from "../orgs";
 import { assertCan } from "../permissions";
 import { parseFields } from "../campaigns/schema";
 import { enqueueRender } from "../queue";
+import { certificatePayload, contactOf } from "../webhook-payloads";
+import { queueWebhookEventTx } from "../webhooks";
 
 export const newPublicId = () => randomBytes(16).toString("base64url"); // 128 bits, not guessable
 
@@ -43,6 +45,7 @@ export async function issueCertificateTx(tx: Tx, entryId: string): Promise<{ id:
   });
   await recordUsage(tx, entry.orgId, "certificates_issued", 1);
   await audit(tx, { orgId: entry.orgId, action: "certificate.issued", entity: "Certificate", entityId: cert.id, meta: { number } });
+  await queueWebhookEventTx(tx, entry.orgId, "certificate.issued", async (pii) => certificatePayload(cert, campaign.name, pii ? contactOf(entry) : undefined));
   return { id: cert.id, publicId: cert.publicId, created: true };
 }
 
@@ -79,7 +82,8 @@ export async function revokeCertificate(ctx: OrgContext, certificateId: string, 
   await withTenant(ctx, async (tx) => {
     const cert = await tx.certificate.findFirst({ where: { id: certificateId, orgId: ctx.orgId } });
     if (!cert) throw new OrgError("NOT_FOUND", "Certificate not found");
-    await tx.certificate.update({ where: { id: cert.id }, data: { status: "REVOKED", revokedAt: new Date(), revokeReason: reason?.slice(0, 300) ?? null, renderStatus: "QUEUED" } });
+    const revoked = await tx.certificate.update({ where: { id: cert.id }, data: { status: "REVOKED", revokedAt: new Date(), revokeReason: reason?.slice(0, 300) ?? null, renderStatus: "QUEUED" }, include: { campaign: { select: { name: true } }, entry: true } });
+    await queueWebhookEventTx(tx, ctx.orgId, "certificate.revoked", async (pii) => certificatePayload(revoked, revoked.campaign.name, pii ? contactOf(revoked.entry) : undefined));
     await audit(tx, { orgId: ctx.orgId, ...actor(ctx), action: "certificate.revoked", entity: "Certificate", entityId: cert.id, meta: { reason } });
   });
   await enqueueRender(certificateId, true); // re-render so images carry the REVOKED stamp

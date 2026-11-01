@@ -14,9 +14,11 @@ import { checkOtpToken } from "../security/otp";
 import { rateLimit } from "../security/ratelimit";
 import { issueCertificateTx } from "../certificates/issue";
 import { enqueueEmail, enqueueRender } from "../queue";
+import { entryPayload } from "../webhook-payloads";
+import { queueWebhookEventTx } from "../webhooks";
 import { maskEmail, maskMobile } from "./countries";
 import { fieldsSchema, parseFields, parseSettings, settingsSchema, type CampaignSettings, type FormField, type Locale } from "./schema";
-import { validateEntry } from "./validation";
+import { validateEntry, type ValidEntry } from "./validation";
 
 const actor = (ctx: OrgContext) => ({ actorId: ctx.userId, impersonatorId: ctx.impersonatorId });
 
@@ -224,6 +226,22 @@ export async function submitEntry(input: SubmitInput): Promise<SubmitResult> {
 
   if (settings.otpEnabled && !checkOtpToken(campaign.id, e.mobile, input.otpToken)) return { ok: false, code: "OTP" };
 
+  return persistEntry(campaign, settings, e, { locale: input.locale, ipSeed: ip, source: "form" });
+}
+
+export type StoreResult = Extract<SubmitResult, { ok: true }> | { ok: false; code: "DUPLICATE" | "LIMIT" };
+
+/**
+ * The shared core of "someone submitted an entry": duplicate policy, store (contact details encrypted), issue the
+ * certificate in the same transaction, then queue render and notifications. Used by the public form and the REST API;
+ * callers do their own validation and abuse checks first (captcha/rate limits for the form, API key limits for the API).
+ */
+export async function persistEntry(
+  campaign: { id: string; orgId: string; name: string },
+  settings: CampaignSettings,
+  e: ValidEntry,
+  opts: { locale: string; ipSeed: string; source: "form" | "api"; consentText?: string },
+): Promise<StoreResult> {
   const mobileHash = blindIndex(e.mobile, campaign.id);
   const existing = await withPlatform((tx) => tx.entry.findFirst({ where: { campaignId: campaign.id, mobileHash }, orderBy: { createdAt: "asc" } }));
   if (existing && settings.duplicateMode === "block") return { ok: false, code: "DUPLICATE" };
@@ -233,28 +251,29 @@ export async function submitEntry(input: SubmitInput): Promise<SubmitResult> {
   }
 
   const status: EntryStatus = settings.approvalMode ? "PENDING" : "APPROVED";
-  const consentText = settings.consentText[input.locale as Locale] ?? null;
+  const consentText = opts.consentText ?? settings.consentText[opts.locale as Locale] ?? null;
   // Entry and certificate commit together, so an entry is never left approved-but-unnumbered.
   let issued: { id: string; publicId: string; created: boolean } | undefined;
   let entry;
   try {
     entry = await withPlatform(async (tx) => {
-    const created = await tx.entry.create({
-      data: {
-        orgId: campaign.orgId, campaignId: campaign.id, name: e.name,
-        mobileEnc: encrypt(e.mobile), mobileHash,
-        emailEnc: e.email ? encrypt(e.email) : null, emailHash: e.email ? blindIndex(e.email, campaign.orgId) : null,
-        customData: e.custom, status, consentAt: e.consent ? new Date() : null, consentText, wallOptIn: e.wallOptIn && settings.wallEnabled,
-        locale: input.locale, ipHash: sha256(ip + campaign.id),
-      },
+      const created = await tx.entry.create({
+        data: {
+          orgId: campaign.orgId, campaignId: campaign.id, name: e.name,
+          mobileEnc: encrypt(e.mobile), mobileHash,
+          emailEnc: e.email ? encrypt(e.email) : null, emailHash: e.email ? blindIndex(e.email, campaign.orgId) : null,
+          customData: e.custom, status, consentAt: e.consent ? new Date() : null, consentText, wallOptIn: e.wallOptIn && settings.wallEnabled,
+          locale: opts.locale, ipHash: sha256(opts.ipSeed + campaign.id),
+        },
+      });
+      await audit(tx, { orgId: campaign.orgId, action: "entry.created", entity: "Entry", entityId: created.id, meta: { campaignId: campaign.id, status, source: opts.source } });
+      await queueWebhookEventTx(tx, campaign.orgId, "entry.created", async (pii) => entryPayload(created, campaign.name, pii));
+      if (status === "APPROVED") issued = await issueCertificateTx(tx, created.id);
+      return created;
     });
-    await audit(tx, { orgId: campaign.orgId, action: "entry.created", entity: "Entry", entityId: created.id, meta: { campaignId: campaign.id, status } });
-    if (status === "APPROVED") issued = await issueCertificateTx(tx, created.id);
-    return created;
-    });
-  } catch (e) {
-    if (e instanceof EntitlementError) return { ok: false, code: "LIMIT" };
-    throw e;
+  } catch (err) {
+    if (err instanceof EntitlementError) return { ok: false, code: "LIMIT" };
+    throw err;
   }
   if (issued?.created) await enqueueRender(issued.id);
   await enqueueEmail({ kind: "entry-notify", id: entry.id });

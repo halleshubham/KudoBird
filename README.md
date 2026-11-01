@@ -3,7 +3,7 @@
 Multi-tenant platform for issuing contribution / participation certificates for any organisation, campaign or event.
 Free for now; plans, limits and feature flags are already wired through one entitlement service.
 
-> Status: **Stage 6 of 7** (super admin panel). Stage 7 (public API, outgoing webhooks, embeds) is still to come. See the roadmap at the bottom.
+> Status: **All 7 stages built** (auth and tenancy, campaigns and designer, rendering, sharing and email, dashboard and bulk issue, super admin, API/webhooks/embeds). See the roadmap at the bottom.
 
 ## Stack
 
@@ -155,6 +155,30 @@ Contributor emails count against the plan's `emailsPerMonth`; the default sender
 
 Consent text and stated purpose are shown on the form and the consent time and wording are stored per entry. For a request from a person: **Export data** (JSON of everything held about them) and **Erase data** (name, mobile, email and custom answers are irreversibly blanked, images are deleted, the certificate is revoked as "erased"; the number stays so numbering is not disturbed). Both are audit-logged, and need the manage-entries permission. **Retention**: set "Erase contributors' personal data after N days" on a campaign and the worker erases older entries daily (03:30 IST). Mobile numbers and emails are encrypted at rest and masked in lists.
 
+## Public API, webhooks and embeds
+
+Under **Developers** (owners and admins). Plan-gated by the `api` and `webhooks` features (on in Free today).
+
+**REST API** (`/api/v1`, OpenAPI at `/api/v1/openapi.json`). Create a key, send `Authorization: Bearer <key>`. Scopes: `read`, `write` (create entries and issue certificates, revoke), `pii` (include mobile and email; off unless granted). A key belongs to one organisation and can never see another. Keys are shown once; only a keyed hash is stored; revoked, expired and suspended-org keys stop working at once. 300 requests/minute per key (`429` + `Retry-After`). Errors are uniform: `{"error":{"code","message","fields?","request_id"}}`.
+
+```bash
+curl $APP_URL/api/v1/campaigns -H "Authorization: Bearer $KEY"
+curl -X POST $APP_URL/api/v1/campaigns/$CAMPAIGN_ID/entries -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"name":"Asha Rao","mobile":"9876543210","email":"asha@example.com","consent":true,"custom_fields":{"village":"Sinnar"}}'
+```
+
+Creating an entry runs the same code as the public form (validation, duplicate policy, approval mode, plan limits, numbering). `consent: true` is required and is recorded as the organisation's attestation. Images render a few seconds later: poll `GET /certificates/{id}` for `render_status`, or use the webhook.
+
+**Webhooks**: `entry.created`, `certificate.issued`, `certificate.revoked`. Each is a signed POST with `X-KudoBird-Event`, `X-KudoBird-Delivery` and `X-KudoBird-Signature: t=<unix>,v1=<hex>`, where `v1` is HMAC-SHA256 of `"{t}.{raw body}"` with the endpoint's signing secret (check it in constant time and reject old timestamps). Reply 2xx within 10 s. Events are written to an outbox **in the same database transaction as the change**, so none is lost; the worker delivers them (`pnpm worker`), retrying 7 times with growing back-off over about a day. An endpoint that fails 20 deliveries in a row is switched off and the owners are emailed. Payloads contain no mobile or email unless the endpoint opted in. URLs must be public `https` addresses: private, loopback, link-local and cloud-metadata destinations are refused both when saving and at connection time (DNS-rebinding safe), redirects are not followed. In development only, `http://localhost` receivers are allowed (set `WEBHOOK_ALLOW_LOCAL=0` to forbid that too).
+
+**Embed the form on your own website**: on the campaign page list the sites allowed to embed it (one per line, `https://www.myngo.org`), then paste the snippet:
+
+```html
+<script src="https://YOUR-HOST/embed.js" data-org="my-org" data-campaign="my-campaign" data-lang="mr" async></script>
+```
+
+An iframe works too (`/embed/o/{org}/{campaign}`). Embedding is **off until you list a site**, is limited to exactly those sites (`Content-Security-Policy: frame-ancestors`, failing closed), and every other page of the app can only be framed by itself.
+
 ## Platform admin panel (`/admin`)
 
 Only users flagged `isSuperAdmin` **who have set up 2FA** can use it. A platform admin without an authenticator is sent to enrol on first sign-in; the panel is unreachable until then. Every admin function also re-checks this in the database, so it does not rely on page guards alone.
@@ -204,4 +228,4 @@ Put the `web` service behind a TLS-terminating proxy (Caddy/nginx). Back up Post
 4. ✅ Sharing and Resend emails (demo checkpoint)
 5. ✅ Dashboard, bulk issue, audit log
 6. ✅ Super admin panel
-7. API, webhooks, embeds
+7. ✅ API, webhooks, embeds

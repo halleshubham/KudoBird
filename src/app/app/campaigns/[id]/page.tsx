@@ -6,6 +6,7 @@ import { getCampaignStats } from "@/server/certificates/events";
 import { env } from "@/server/env";
 import { withTenant } from "@/server/db";
 import { requireOrg } from "@/server/session";
+import { embedSnippets } from "@/lib/embed";
 import { updateCampaignAction, updateSettingsAction } from "../actions";
 
 const Check = ({ name, label, checked }: { name: string; label: string; checked: boolean }) => (
@@ -19,6 +20,7 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
   const org = await withTenant(ctx, (tx) => tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId } }));
   const url = `${env().APP_URL}/o/${org.slug}/${c.slug}`;
   const s = c.settings;
+  const snippets = embedSnippets(env().APP_URL, org.slug, c.slug);
   const stats = await getCampaignStats(ctx, id);
   return (
     <div className="space-y-5">
@@ -29,6 +31,13 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
         <p className="break-all text-brand-700">{url}</p>
         <p className="text-gray-500">{c.status === "ACTIVE" ? "Live: anyone with the link can submit." : "Set the status to Active to start accepting entries."}</p>
       </div>
+      {s.embedOrigins.length > 0 && (
+        <details className="card text-sm"><summary className="cursor-pointer font-semibold">Embed code</summary>
+          <p className="mt-2 text-xs text-gray-600">Resizes to fit the form (works only on the sites listed under “Embed on your website”).</p>
+          <pre className="mt-1 overflow-x-auto rounded bg-gray-50 p-2 text-xs">{snippets.script}</pre>
+          <p className="mt-2 text-xs text-gray-600">Or a plain iframe:</p>
+          <pre className="mt-1 overflow-x-auto rounded bg-gray-50 p-2 text-xs">{snippets.iframe}</pre></details>
+      )}
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         {[["Certificates", stats.certificates], ["Page views", stats.views], ["Share clicks", stats.shares], ["Pending approval", stats.entries.PENDING ?? 0]].map(([k, v]) => (
           <div key={k} className="card"><p className="text-xs uppercase tracking-wide text-gray-500">{k}</p><p className="text-2xl font-semibold">{v}</p></div>
@@ -89,6 +98,10 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
               </div>
             ))}
             <Field name="retentionDays" label="Erase contributors' personal data after (days, empty = keep)" type="number" min={30} max={3650} defaultValue={s.retentionDays ?? ""} />
+            <p className="pt-2 text-sm font-semibold">Embed on your website</p>
+            <div><label className="label" htmlFor="embedOrigins">Websites allowed to show this form (one per line)</label>
+              <textarea id="embedOrigins" name="embedOrigins" rows={2} className="input font-mono text-xs" placeholder="https://www.myngo.org" defaultValue={s.embedOrigins.join("\n")} />
+              <p className="mt-1 text-xs text-gray-500">Empty means nobody can embed it. Use the site address only (no path), starting with https://.</p></div>
             <Field name="shareText" label="Share text ({{campaign}}, {{url}}, {{name}})" defaultValue={s.shareText} />
             <Field name="hashtags" label="Hashtags (space separated, no #)" defaultValue={s.hashtags.join(" ")} />
           </ActionForm>
