@@ -81,7 +81,8 @@ const prefixFrom = (name: string) => {
 export async function createCampaign(ctx: OrgContext, input: CreateCampaignInput) {
   assertCan(ctx.role, "campaigns.manage");
   const base = slugify(input.name);
-  const prefix = (input.numberPrefix ?? prefixFrom(input.name)).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  // A blank box in the form arrives as "" (not undefined): that means "use the default", not "an empty prefix".
+  const prefix = (input.numberPrefix?.trim() || prefixFrom(input.name)).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
   if (!prefix) throw new OrgError("INVALID", "Certificate number prefix is required");
   return withUniqueSlug(base, "campaign", (slug) =>
     withTenant(ctx, async (tx) => {
@@ -98,6 +99,7 @@ export async function createCampaign(ctx: OrgContext, input: CreateCampaignInput
       await audit(tx, { orgId: ctx.orgId, ...actorOf(ctx), action: "campaign.created", entity: "Campaign", entityId: c.id, meta: { name: c.name } });
       return c;
     }),
+    async (slug) => (await withTenant(ctx, (tx) => tx.campaign.count({ where: { orgId: ctx.orgId, slug } }))) > 0,
   );
 }
 

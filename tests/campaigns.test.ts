@@ -247,3 +247,34 @@ describe("concurrent identical submissions", () => {
     expect(results.filter((r) => r.ok && !r.duplicate)).toHaveLength(1);
   });
 });
+
+describe("addresses that are already taken (real database)", () => {
+  it("two organisations with the same name get different addresses, and neither creation fails", async () => {
+    const { createOrganization } = await import("@/server/orgs");
+    const { makeUser } = await import("./helpers");
+    const name = `Same Name ${Math.random().toString(36).slice(2, 8)}`;
+    const u1 = await makeUser("dupa"), u2 = await makeUser("dupb");
+    const a = await createOrganization(u1.id, name);
+    const b = await createOrganization(u2.id, name);
+    expect(a.slug).not.toBe(b.slug);
+    expect(b.slug).toMatch(new RegExp(`^${a.slug}-[0-9a-f]{4}$`));
+    await cleanup([a.id, b.id], [u1.id, u2.id]);
+  });
+  it("two campaigns with the same name in one organisation get different addresses", async () => {
+    const a = await createCampaign(c("EDITOR"), { name: "Identical Name", locale: "en", preset: "classic" });
+    const b = await createCampaign(c("EDITOR"), { name: "Identical Name", locale: "en", preset: "classic" });
+    expect(a.slug).not.toBe(b.slug);
+    expect(b.slug).toMatch(new RegExp(`^${a.slug}-[0-9a-f]{4}$`));
+  });
+});
+
+describe("certificate number prefix from the form", () => {
+  it.each([["", "blank (what an untouched form field sends)"], ["   ", "only spaces"], [undefined, "not provided"]])("falls back to initials when it is %j (%s)", async (numberPrefix, _why) => {
+    const camp = await createCampaign(c("EDITOR"), { name: "Sant Tukaram Fund", locale: "en", preset: "minimal", numberPrefix });
+    expect(camp.numberPrefix).toBe("STF");
+  });
+  it("uses and normalises an explicit prefix; a name with no Latin letters still gets a usable default", async () => {
+    expect((await createCampaign(c("EDITOR"), { name: "Explicit one", locale: "en", preset: "minimal", numberPrefix: " ab-12! " })).numberPrefix).toBe("AB12");
+    expect((await createCampaign(c("EDITOR"), { name: "बळीराजाची दिवाळी", locale: "mr", preset: "festive", numberPrefix: "" })).numberPrefix).toBe("CERT");
+  });
+});

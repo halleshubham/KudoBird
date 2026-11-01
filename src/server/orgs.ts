@@ -37,6 +37,7 @@ export async function createOrganization(userId: string, name: string) {
       await audit(tx, { orgId, actorId: userId, action: "org.created", entity: "Organization", entityId: orgId });
       return org;
     }),
+    async (slug) => (await withPlatform((tx) => tx.organization.count({ where: { slug } }))) > 0,
   );
 }
 

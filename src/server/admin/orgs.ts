@@ -93,6 +93,7 @@ export async function createOrgForOwner(adminId: string, input: { name: string; 
       await platformAudit(tx, adminId, "org.created", "Organization", orgId, { name, owner: email, plan: plan.key });
       return o;
     }),
+    async (slug) => (await withPlatform((tx) => tx.organization.count({ where: { slug } }))) > 0,
   );
   if (invite) {
     const url = new URL("/invite/accept", env().APP_URL);

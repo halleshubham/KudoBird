@@ -12,23 +12,22 @@ export function slugify(input: string): string {
   return s || "org";
 }
 
-/** True only for a unique-constraint violation on a `slug` column (not, say, a certificate prefix). */
-const isSlugConflict = (e: unknown) => {
-  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") return false;
-  const target = (e.meta?.target as string[] | string | undefined) ?? [];
-  return (Array.isArray(target) ? target : [target]).some((t) => String(t).includes("slug"));
-};
+const isUniqueViolation = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 
 /**
- * Runs `create(slug)` with `base`, and if that address is taken retries with a short random suffix.
- * Any other failure, including other unique violations, is rethrown untouched.
+ * Runs `create(slug)` with `base`; if that address is taken, retries with a short random suffix.
+ *
+ * A unique violation is only treated as "address taken" after asking the database (`isTaken`). Prisma does not reliably say
+ * WHICH constraint failed (`meta.target` is null with the pg driver), so guessing from the error would either miss real slug
+ * clashes or hide unrelated violations. Any other failure is rethrown untouched.
  */
-export async function withUniqueSlug<T>(base: string, noun: string, create: (slug: string) => Promise<T>, attempts = 5): Promise<T> {
+export async function withUniqueSlug<T>(base: string, noun: string, create: (slug: string) => Promise<T>, isTaken: (slug: string) => Promise<boolean>, attempts = 5): Promise<T> {
   for (let i = 0; i < attempts; i++) {
+    const slug = i === 0 ? base : `${base}-${randomUUID().slice(0, 4)}`;
     try {
-      return await create(i === 0 ? base : `${base}-${randomUUID().slice(0, 4)}`);
+      return await create(slug);
     } catch (e) {
-      if (!isSlugConflict(e)) throw e;
+      if (!isUniqueViolation(e) || !(await isTaken(slug))) throw e;
     }
   }
   throw new OrgError("SLUG_TAKEN", `Could not allocate a unique ${noun} address`);

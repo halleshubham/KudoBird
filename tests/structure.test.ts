@@ -22,26 +22,30 @@ describe("paginate", () => {
 });
 
 describe("withUniqueSlug", () => {
-  const conflict = (target: string[]) => new Prisma.PrismaClientKnownRequestError("Unique constraint failed", { code: "P2002", clientVersion: "6", meta: { target } });
+  // Real Prisma (pg driver) reports `meta.target: null`, so the violated column can never be read from the error.
+  const violation = () => new Prisma.PrismaClientKnownRequestError("Unique constraint failed on the (not available)", { code: "P2002", clientVersion: "6", meta: { modelName: "Organization", target: null } });
+  const never = async () => false;
   it("returns the first free address untouched", async () => {
     const seen: string[] = [];
-    expect(await withUniqueSlug("my-org", "organisation", async (s) => { seen.push(s); return s; })).toBe("my-org");
+    expect(await withUniqueSlug("my-org", "organisation", async (s) => { seen.push(s); return s; }, never)).toBe("my-org");
     expect(seen).toEqual(["my-org"]);
   });
-  it("retries with a short suffix when the address is taken", async () => {
+  it("retries with a short suffix when the database says the address is taken", async () => {
+    const taken = new Set<string>(["my-org"]);
     const tried: string[] = [];
-    const out = await withUniqueSlug("my-org", "organisation", async (s) => { tried.push(s); if (tried.length < 3) throw conflict(["orgId", "slug"]); return s; });
-    expect(tried).toHaveLength(3);
-    expect(tried[0]).toBe("my-org");
+    const out = await withUniqueSlug("my-org", "organisation", async (s) => { tried.push(s); if (taken.has(s)) throw violation(); return s; }, async (s) => taken.has(s));
+    expect(tried).toHaveLength(2);
     expect(out).toMatch(/^my-org-[0-9a-f]{4}$/);
   });
-  it("does NOT swallow a different unique violation (e.g. a certificate prefix) or any other error", async () => {
-    await expect(withUniqueSlug("x", "campaign", async () => { throw conflict(["campaignId", "number"]); })).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
-    await expect(withUniqueSlug("x", "campaign", async () => { throw new Error("boom"); })).rejects.toThrow("boom");
+  it("rethrows a unique violation that is NOT about the address (the address is free)", async () => {
+    await expect(withUniqueSlug("x", "campaign", async () => { throw violation(); }, never)).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+  });
+  it("rethrows any other error untouched", async () => {
+    await expect(withUniqueSlug("x", "campaign", async () => { throw new Error("boom"); }, async () => true)).rejects.toThrow("boom");
   });
   it("gives up with a clear, user-safe error after the allowed attempts", async () => {
     let calls = 0;
-    await expect(withUniqueSlug("x", "campaign", async () => { calls++; throw conflict(["slug"]); }, 3)).rejects.toMatchObject({ code: "SLUG_TAKEN", message: expect.stringContaining("campaign") });
+    await expect(withUniqueSlug("x", "campaign", async () => { calls++; throw violation(); }, async () => true, 3)).rejects.toMatchObject({ code: "SLUG_TAKEN", message: expect.stringContaining("campaign") });
     expect(calls).toBe(3);
   });
 });
