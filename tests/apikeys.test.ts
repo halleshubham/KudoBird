@@ -27,7 +27,7 @@ describe("key generation and storage", () => {
     expect(key).toMatch(KEY_FORMAT);
     const row = await withPlatform((tx) => tx.apiKey.findUniqueOrThrow({ where: { id: record.id } }));
     expect(row.keyHash).toBe(hashToken(key));
-    expect(JSON.stringify(row)).not.toContain(key.split("_")[2]); // the secret part is nowhere in the row
+    expect(JSON.stringify(row)).not.toContain(key.split("_").slice(2).join("_")); // the secret part is nowhere in the row
     expect(JSON.stringify(await listApiKeys(c("ADMIN")))).not.toMatch(/keyHash|kb_[a-z0-9]{8}_[A-Za-z0-9_-]{43}/);
     expect(record).toMatchObject({ name: "CI key", scopes: ["read", "write"], revokedAt: null });
   });
