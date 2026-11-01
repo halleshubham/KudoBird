@@ -36,6 +36,8 @@ export async function currentSession() {
 export async function requireUser() {
   const session = await currentSession();
   if (!session) redirect("/login");
+  // Accounts created before verification became compulsory, and any session that slipped through, still have to prove the address.
+  if (!session.user.emailVerifiedAt && !session.impersonatorId) redirect(`/verify-email?email=${encodeURIComponent(session.user.email)}`);
   const needsMfa = session.user.isSuperAdmin || !!session.user.totpEnabledAt;
   if (needsMfa && !session.mfaVerified) redirect("/2fa");
   return { user: session.user, session };

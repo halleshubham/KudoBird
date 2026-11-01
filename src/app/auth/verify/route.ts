@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   try {
     const user = await consumeAuthToken(req.nextUrl.searchParams.get("token") ?? "", "VERIFY_EMAIL");
     await setSessionCookie(user.id);
-    return NextResponse.redirect(new URL("/app", base));
+    return NextResponse.redirect(new URL("/onboarding", base));
   } catch {
     return NextResponse.redirect(new URL("/login?error=" + encodeURIComponent("This link is invalid or has expired"), base));
   }

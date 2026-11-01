@@ -28,7 +28,7 @@ for (const [vp, width, height] of [["desktop", 1360, 860], ["phone", 390, 800]])
     if (overflow) problems.push(`${vp} ${path}: horizontal scroll`);
     console.log(`${vp.padEnd(7)} ${path.padEnd(60)} ${violations.length || overflow ? "ISSUES" : "ok"}`);
   };
-  for (const p of ["/", "/login", "/signup", "/forgot"]) await scan(p);
+  for (const p of ["/", "/login", "/signup", "/forgot", "/verify-email?email=someone@example.org"]) await scan(p);
   await page.goto(BASE + "/login");
   await page.fill("[name=email]", EMAIL); await page.fill("[name=password]", PASSWORD);
   await page.click('button:has-text("Sign in")'); await page.waitForURL("**/app");

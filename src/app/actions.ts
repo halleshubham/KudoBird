@@ -2,12 +2,13 @@
 import { redirect } from "next/navigation";
 import { toActionState, type ActionState } from "@/app/_lib/action-errors";
 import { z } from "zod";
-import { beginTotpSetup, confirmTotpSetup, loginWithPassword, markMfaVerified, registerUser, requestMagicLink, requestPasswordReset, resetPassword, setActiveOrg, verifyTotp } from "@/server/auth";
+import { AuthError, beginTotpSetup, confirmTotpSetup, loginWithPassword, markMfaVerified, registerUser, requestMagicLink, resendVerification, requestPasswordReset, resetPassword, setActiveOrg, verifyTotp } from "@/server/auth";
 import { createOrganization } from "@/server/orgs";
 import { clearSessionCookie, currentSession, requireOrg, requireUser, setSessionCookie } from "@/server/session";
 
 type State = ActionState;
 const fail = toActionState;
+const verifyPage = (email: string) => `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`;
 const safeNext = (n: FormDataEntryValue | null) => (typeof n === "string" && n.startsWith("/") && !n.startsWith("//") ? n : "/app");
 
 export async function loginAction(_: State, fd: FormData): Promise<State> {
@@ -16,15 +17,25 @@ export async function loginAction(_: State, fd: FormData): Promise<State> {
     const user = await loginWithPassword(email, password);
     await setSessionCookie(user.id);
     redirect(safeNext(fd.get("next")));
-  } catch (e) { return fail(e); }
+  } catch (e) {
+    if (e instanceof AuthError && e.code === "EMAIL_NOT_VERIFIED") redirect(verifyPage(String(fd.get("email") ?? "")));
+    return fail(e);
+  }
 }
 
 export async function signupAction(_: State, fd: FormData): Promise<State> {
   try {
     const { email, password, name } = z.object({ email: z.string().email(), password: z.string().min(8, "Password must be at least 8 characters"), name: z.string().min(1, "Name is required") }).parse(Object.fromEntries(fd));
-    const user = await registerUser({ email, password, name });
-    await setSessionCookie(user.id);
-    redirect("/onboarding");
+    await registerUser({ email, password, name });
+    redirect(verifyPage(email)); // no session yet: signing in requires the verified address
+  } catch (e) { return fail(e); }
+}
+
+export async function resendVerificationAction(_: State, fd: FormData): Promise<State> {
+  try {
+    const { email } = z.object({ email: z.string().email() }).parse(Object.fromEntries(fd));
+    await resendVerification(email);
+    return { info: "If that address is waiting for verification, a new link is on its way. Links can be sent once a minute." };
   } catch (e) { return fail(e); }
 }
 

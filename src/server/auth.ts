@@ -26,18 +26,49 @@ export const normalizeEmail = (e: string) => e.trim().toLowerCase();
 
 // ---------------------------------------------------------------- users
 
+/** Minimum gap between verification emails to one user. */
+const VERIFY_COOLDOWN_MS = 60_000;
+
+/**
+ * Sends a fresh verification link unless one went out in the last minute. Never throws about the account itself (callers must not
+ * learn whether an address is registered); a failure to deliver is reported by the caller that needs it.
+ */
+export async function sendVerificationLink(user: Pick<User, "id" | "email" | "emailVerifiedAt">): Promise<"sent" | "cooldown" | "verified"> {
+  if (user.emailVerifiedAt) return "verified";
+  const recent = await prisma.authToken.findFirst({ where: { userId: user.id, type: "VERIFY_EMAIL", createdAt: { gt: new Date(Date.now() - VERIFY_COOLDOWN_MS) } }, select: { id: true } });
+  if (recent) return "cooldown";
+  await sendAuthLink("VERIFY_EMAIL", user);
+  return "sent";
+}
+
+/** Public "resend" entry point: silent for unknown, disabled and already verified addresses. */
+export async function resendVerification(emailRaw: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email: normalizeEmail(emailRaw) } });
+  if (user && !user.disabledAt) await sendVerificationLink(user).catch(() => {});
+}
+
+/**
+ * Creates the account but NOT a session: the address must be verified (by clicking the emailed link) before the user can sign in.
+ * Registering again with an address whose earlier attempt was never verified replaces the password, so whoever finally proves
+ * ownership of the inbox is the one who holds the account.
+ */
 export async function registerUser(input: { email: string; password: string; name?: string }): Promise<User> {
   const email = normalizeEmail(input.email);
   if (input.password.length < 8) throw new AuthError("WEAK_PASSWORD", "Password must be at least 8 characters");
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing?.passwordHash) throw new AuthError("EMAIL_TAKEN", "An account with this email already exists");
+  if (existing?.emailVerifiedAt && existing.passwordHash) throw new AuthError("EMAIL_TAKEN", "An account with this email already exists");
+  if (existing?.disabledAt) throw new AuthError("DISABLED", "This account is disabled");
   if (!existing) await guardSignups();
   const passwordHash = await hashPassword(input.password);
   // A magic-link-only account may already exist; attach the password to it.
   const user = existing
     ? await prisma.user.update({ where: { id: existing.id }, data: { passwordHash, name: input.name ?? existing.name } })
     : await prisma.user.create({ data: { email, passwordHash, name: input.name } });
-  if (!user.emailVerifiedAt) await sendAuthLink("VERIFY_EMAIL", user);
+  try {
+    await sendVerificationLink(user);
+  } catch {
+    throw new AuthError("EMAIL_FAILED", "We could not send the verification email. Please check the address and try again.");
+  }
   return user;
 }
 
@@ -47,6 +78,10 @@ export async function loginWithPassword(emailRaw: string, password: string): Pro
   const ok = user?.passwordHash ? await verifyPassword(password, user.passwordHash) : false;
   if (!user || !ok) throw new AuthError("INVALID_CREDENTIALS", "Invalid email or password");
   if (user.disabledAt) throw new AuthError("DISABLED", "This account is disabled");
+  if (!user.emailVerifiedAt) {
+    await sendVerificationLink(user).catch(() => {}); // the right password was typed, so it is safe to say what is missing
+    throw new AuthError("EMAIL_NOT_VERIFIED", "Please verify your email address first. We have sent you a link.");
+  }
   return user;
 }
 

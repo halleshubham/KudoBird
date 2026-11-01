@@ -253,3 +253,6 @@ Also back up the `appdata` volume (rendered certificates and uploads) if you can
 
 ## Design and UX
 Screens follow [docs/ui-ux-guidelines.md](docs/ui-ux-guidelines.md). Run `pnpm ux:audit` against a running, seeded app to check accessibility and mobile layout. History of the last audit: [docs/ux-audit.md](docs/ux-audit.md).
+
+## Email verification
+New accounts must verify their email before they can sign in: sign-up creates the account and sends a link, but no session. Password sign-in, and any existing session, is refused until the address is verified (magic-link and Google sign-in verify it by themselves). Links last 24 hours and can be resent once a minute from `/verify-email`. Accounts created before this rule are treated the same way: on their next sign-in they receive a link. Seeded and `create-super-admin` accounts are created verified.

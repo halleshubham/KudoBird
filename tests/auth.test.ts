@@ -48,12 +48,39 @@ describe("registration, login, verification", () => {
   });
   it("rejects duplicate emails, weak passwords, bad credentials without enumeration", async () => {
     const e = email();
-    created.push((await registerUser({ email: e, password: "password123" })).id);
+    const first = await registerUser({ email: e, password: "password123" });
+    created.push(first.id);
+    await consumeAuthToken(tokenFrom(e), "VERIFY_EMAIL");
     await expect(registerUser({ email: e.toUpperCase(), password: "password123" })).rejects.toMatchObject({ code: "EMAIL_TAKEN" });
     await expect(registerUser({ email: email(), password: "short" })).rejects.toMatchObject({ code: "WEAK_PASSWORD" });
     await expect(loginWithPassword(e, "nope")).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
     await expect(loginWithPassword("ghost@test.local", "nope")).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
     await expect(loginWithPassword(e, "password123")).resolves.toBeTruthy();
+  });
+  it("an unverified address cannot sign in until the emailed link is used; the link is resent at most once a minute", async () => {
+    const e = email();
+    const u = await registerUser({ email: e, password: "password123", name: "New" });
+    created.push(u.id);
+    const sentAtSignup = consoleOutbox().length;
+    await expect(loginWithPassword(e, "password123")).rejects.toMatchObject({ code: "EMAIL_NOT_VERIFIED" });
+    expect(consoleOutbox().length).toBe(sentAtSignup); // cooldown: the signup email is still fresh, no second one
+    await prisma.authToken.updateMany({ where: { userId: u.id }, data: { createdAt: new Date(Date.now() - 120_000) } });
+    await expect(loginWithPassword(e, "password123")).rejects.toMatchObject({ code: "EMAIL_NOT_VERIFIED" });
+    expect(consoleOutbox().length).toBe(sentAtSignup + 1); // a fresh link went out after the cooldown
+    await expect(loginWithPassword(e, "wrong-password")).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" }); // no hint without the password
+    await consumeAuthToken(tokenFrom(e), "VERIFY_EMAIL");
+    await expect(loginWithPassword(e, "password123")).resolves.toMatchObject({ id: u.id });
+  });
+  it("registering again before verifying replaces the password, so only the inbox owner ends up in control", async () => {
+    const e = email();
+    const first = await registerUser({ email: e, password: "attacker-password" });
+    created.push(first.id);
+    await prisma.authToken.updateMany({ where: { userId: first.id }, data: { createdAt: new Date(Date.now() - 120_000) } });
+    const second = await registerUser({ email: e, password: "owner-password-1" });
+    expect(second.id).toBe(first.id);
+    await consumeAuthToken(tokenFrom(e), "VERIFY_EMAIL");
+    await expect(loginWithPassword(e, "attacker-password")).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    await expect(loginWithPassword(e, "owner-password-1")).resolves.toBeTruthy();
   });
   it("disabled accounts cannot log in or hold sessions", async () => {
     const e = email();

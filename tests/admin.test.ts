@@ -212,6 +212,7 @@ describe("user management", () => {
     const e = `dis-${randomUUID()}@test.local`;
     const u = await registerUser({ email: e, password: "password123" });
     createdUsers.push(u.id);
+    await prisma.user.update({ where: { id: u.id }, data: { emailVerifiedAt: new Date() } }); // password sign-in needs a verified address
     const { createSession } = await import("@/server/auth");
     const { token } = await createSession(u.id);
     await usersAdmin.setUserDisabled(admin.id, u.id, true);
