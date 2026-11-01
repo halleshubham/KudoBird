@@ -1,4 +1,6 @@
 import { ActionForm, Field } from "@/components/ActionForm";
+import { Badge, PageHeader } from "@/components/ui";
+import { CopyButton } from "@/components/CopyButton";
 import { CampaignTabs } from "@/components/Tabs";
 import { COUNTRIES } from "@/server/campaigns/countries";
 import { getCampaign } from "@/server/campaigns/service";
@@ -25,16 +27,20 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
   const stats = await getCampaignStats(ctx, id);
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">{c.name}</h1>
+      <PageHeader title={c.name} action={<Badge tone={c.status === "ACTIVE" ? "green" : c.status === "DRAFT" ? "amber" : "neutral"}>{c.status.charAt(0) + c.status.slice(1).toLowerCase()}</Badge>} />
       <CampaignTabs id={id} active="overview" />
-      <div className="card text-sm">
-        <p className="font-semibold">Public form link</p>
-        <p className="break-all text-brand-700">{url}</p>
-        <p className="text-neutral-500">{c.status === "ACTIVE" ? "Live: anyone with the link can submit." : "Set the status to Active to start accepting entries."}</p>
+      <div className="card flex flex-wrap items-center gap-3 text-sm">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold">Public form link</h2>
+          <p className="break-all text-brand-700">{url}</p>
+          <p className="text-neutral-600">{c.status === "ACTIVE" ? "Live: anyone with the link can submit." : "Not accepting entries yet. Set the status to Active in the Campaign card below."}</p>
+        </div>
+        <CopyButton text={url} />
+        <a href={url} target="_blank" rel="noreferrer" className="btn-ghost">Open form<span className="sr-only"> (opens in a new tab)</span></a>
       </div>
       {s.embedOrigins.length > 0 && (
         <details className="card text-sm"><summary className="cursor-pointer font-semibold">Embed code</summary>
-          <p className="mt-2 text-xs text-neutral-600">Resizes to fit the form (works only on the sites listed under “Embed on your website”).</p>
+          <p className="mt-2 text-xs text-neutral-600">Resizes to fit the form (works only on the sites listed under “Sharing and embedding”).</p>
           <pre className="mt-1 overflow-x-auto rounded bg-neutral-50 p-2 text-xs">{snippets.script}</pre>
           <p className="mt-2 text-xs text-neutral-600">Or a plain iframe:</p>
           <pre className="mt-1 overflow-x-auto rounded bg-neutral-50 p-2 text-xs">{snippets.iframe}</pre></details>
@@ -48,10 +54,10 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
             <p>{Object.entries(stats.sharesByPlatform).map(([k, v]) => `${k}: ${v}`).join(" · ")}</p></div>
         )}
       </div>
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid items-start gap-5 md:grid-cols-2">
         <div className="card">
-          <p className="mb-3 text-sm font-semibold">Campaign</p>
-          <ActionForm action={updateCampaignAction} submit="Save">
+          <h2 className="mb-3 font-semibold">Campaign</h2>
+          <ActionForm action={updateCampaignAction} submit="Save changes" pendingLabel="Saving…">
             <input type="hidden" name="id" value={id} />
             <Field name="name" label="Name" defaultValue={c.name} required />
             <Field name="description" label="Description (shown on the form)" defaultValue={c.description ?? ""} />
@@ -67,10 +73,11 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
           </ActionForm>
         </div>
         <div className="card">
-          <p className="mb-3 text-sm font-semibold">Form behaviour</p>
-          <ActionForm action={updateSettingsAction} submit="Save settings">
+          <h2 className="mb-3 font-semibold">Form behaviour</h2>
+          <ActionForm action={updateSettingsAction} submit="Save settings" pendingLabel="Saving…">
             <input type="hidden" name="id" value={id} />
-            <div className="flex gap-4">{(["mr", "hi", "en"] as const).map((l) => <Check key={l} name={`lang_${l}`} label={l.toUpperCase()} checked={s.languages.includes(l)} />)}</div>
+            <fieldset><legend className="label">Languages offered on the form</legend>
+              <div className="flex gap-4">{(["mr", "hi", "en"] as const).map((l) => <Check key={l} name={`lang_${l}`} label={{ mr: "मराठी", hi: "हिन्दी", en: "English" }[l]} checked={s.languages.includes(l)} />)}</div></fieldset>
             <div>
               <label className="label" htmlFor="mobileCountry">Mobile number country</label>
               <select id="mobileCountry" name="mobileCountry" defaultValue={s.mobileCountry} className="input">{COUNTRIES.map((x) => <option key={x.code} value={x.code}>{x.name} ({x.dial})</option>)}</select>
@@ -86,25 +93,36 @@ export default async function CampaignOverview({ params }: { params: Promise<{ i
             <Check name="captcha" label="Bot protection (Cloudflare Turnstile)" checked={s.captcha} />
             <Check name="otpEnabled" label="Verify mobile by OTP" checked={s.otpEnabled} />
             <Check name="wallEnabled" label="Offer a public contributors wall (opt-in)" checked={s.wallEnabled} />
-            {(["mr", "hi", "en"] as const).map((l) => (
-              <Field key={l} name={`consent_${l}`} label={`Custom consent text (${l.toUpperCase()}), optional`} defaultValue={s.consentText[l] ?? ""} />
-            ))}
-            <p className="pt-2 text-sm font-semibold">Emails to contributors (optional overrides)</p>
-            <p className="text-xs text-neutral-500">Use {"{{name}}"}, {"{{campaign}}"}, {"{{certificate_no}}"}, {"{{org}}"}. Leave empty for the built-in translation.</p>
-            {(["mr", "hi", "en"] as const).map((l) => (
-              <div key={l} className="space-y-2">
-                <Field name={`certSubject_${l}`} label={`Certificate email subject (${l.toUpperCase()})`} defaultValue={s.email.certificateSubject[l] ?? ""} />
-                <Field name={`certIntro_${l}`} label={`Certificate email intro (${l.toUpperCase()})`} defaultValue={s.email.certificateIntro[l] ?? ""} />
-                <Field name={`rejIntro_${l}`} label={`Rejection email text (${l.toUpperCase()})`} defaultValue={s.email.rejectedIntro[l] ?? ""} />
+            <details className="rounded-xl border border-black/10 p-3"><summary className="cursor-pointer font-medium">Consent and privacy</summary>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-neutral-500">Leave the consent texts empty to use the built-in wording in each language.</p>
+                {(["mr", "hi", "en"] as const).map((l) => (
+                  <Field key={l} name={`consent_${l}`} label={`Custom consent text (${{ mr: "मराठी", hi: "हिन्दी", en: "English" }[l]})`} defaultValue={s.consentText[l] ?? ""} />
+                ))}
+                <Field name="retentionDays" label="Erase personal data after (days)" type="number" min={30} max={3650} defaultValue={s.retentionDays ?? ""} hint="Leave empty to keep it until you erase it yourself. 30 days minimum." />
               </div>
-            ))}
-            <Field name="retentionDays" label="Erase contributors' personal data after (days, empty = keep)" type="number" min={30} max={3650} defaultValue={s.retentionDays ?? ""} />
-            <p className="pt-2 text-sm font-semibold">Embed on your website</p>
+            </details>
+            <details className="rounded-xl border border-black/10 p-3"><summary className="cursor-pointer font-medium">Emails to contributors</summary>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-neutral-500">Optional wording overrides. You can use {"{{name}}"}, {"{{campaign}}"}, {"{{certificate_no}}"} and {"{{org}}"}. Empty uses the built-in translation.</p>
+                {(["mr", "hi", "en"] as const).map((l) => (
+                  <fieldset key={l} className="space-y-2"><legend className="label">{{ mr: "मराठी", hi: "हिन्दी", en: "English" }[l]}</legend>
+                    <Field name={`certSubject_${l}`} label="Certificate email subject" defaultValue={s.email.certificateSubject[l] ?? ""} />
+                    <Field name={`certIntro_${l}`} label="Certificate email intro" defaultValue={s.email.certificateIntro[l] ?? ""} />
+                    <Field name={`rejIntro_${l}`} label="Rejection email text" defaultValue={s.email.rejectedIntro[l] ?? ""} />
+                  </fieldset>
+                ))}
+              </div>
+            </details>
+            <details className="rounded-xl border border-black/10 p-3"><summary className="cursor-pointer font-medium">Sharing and embedding</summary>
+              <div className="mt-3 space-y-3">
             <div><label className="label" htmlFor="embedOrigins">Websites allowed to show this form (one per line)</label>
               <textarea id="embedOrigins" name="embedOrigins" rows={2} className="input font-mono text-xs" placeholder="https://www.myngo.org" defaultValue={s.embedOrigins.join("\n")} />
               <p className="mt-1 text-xs text-neutral-500">Empty means nobody can embed it. Use the site address only (no path), starting with https://.</p></div>
-            <Field name="shareText" label="Share text ({{campaign}}, {{url}}, {{name}})" defaultValue={s.shareText} />
-            <Field name="hashtags" label="Hashtags (space separated, no #)" defaultValue={s.hashtags.join(" ")} />
+            <Field name="shareText" label="Share text" defaultValue={s.shareText} hint="You can use {{campaign}}, {{url}} and {{name}}." />
+            <Field name="hashtags" label="Hashtags" defaultValue={s.hashtags.join(" ")} hint="Separated by spaces, without the # sign." />
+              </div>
+            </details>
           </ActionForm>
         </div>
       </div>

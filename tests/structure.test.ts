@@ -99,3 +99,10 @@ describe("architecture rules", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("UI conventions", () => {
+  it("destructive actions use the accessible ConfirmButton dialog, never window.confirm()", () => {
+    const offenders = walk("src").filter((f) => f.endsWith(".tsx")).filter((f) => /window\.confirm\(|[^.\w]confirm\(["`']/.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+});

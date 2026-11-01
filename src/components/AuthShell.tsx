@@ -10,5 +10,5 @@ export function AuthShell({ title, children }: { title: string; children: React.
   );
 }
 export function Notice({ kind, children }: { kind: "error" | "info"; children: React.ReactNode }) {
-  return <p className={`rounded-lg p-3 text-sm ${kind === "error" ? "border border-red-100 bg-red-50 text-red-700" : "border border-green-100 bg-green-50 text-green-800"}`}>{children}</p>;
+  return <p role={kind === "error" ? "alert" : "status"} className={`rounded-lg p-3 text-sm ${kind === "error" ? "border border-red-100 bg-red-50 text-red-700" : "border border-green-100 bg-green-50 text-green-800"}`}>{children}</p>;
 }

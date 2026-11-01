@@ -20,7 +20,7 @@ export default async function Audit({ searchParams }: { searchParams: Promise<{ 
           <ul className="space-y-1">{support.map((s) => <li key={s.id}><span className="text-neutral-500">{s.startedAt.toISOString().slice(0, 16).replace("T", " ")} UTC</span> · {s.adminEmail} as {s.targetEmail} · <span className={s.state === "active" ? "font-semibold text-amber-800" : "text-neutral-600"}>{s.state}</span> · “{s.reason}”</li>)}</ul></section>
       )}
       <form className="flex flex-wrap gap-2 text-sm">
-        <select name="action" defaultValue={sp.action ?? ""} className="input !w-auto"><option value="">All actions</option>{log.actions.map((a) => <option key={a}>{a}</option>)}</select>
+        <select name="action" aria-label="Filter by action" defaultValue={sp.action ?? ""} className="input !w-auto"><option value="">All actions</option>{log.actions.map((a) => <option key={a}>{a}</option>)}</select>
         <button className="btn-ghost">Filter</button><span className="self-center text-neutral-500">{log.total} events</span>
       </form>
       <div className="card divide-y overflow-x-auto">

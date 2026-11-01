@@ -1,5 +1,6 @@
 "use client";
 import { useActionState, useState } from "react";
+import { ConfirmButton } from "@/components/ConfirmButton";
 import type { DevState } from "./actions";
 
 /** A form whose server action may return a secret. The secret is displayed once, with a copy button, and then forgotten. */
@@ -7,9 +8,13 @@ export function RevealForm({ action, submit, children, className, confirm, quiet
   const [state, act, pending] = useActionState(action, undefined);
   const [copied, setCopied] = useState(false);
   return (
-    <form action={act} className={className ?? "space-y-3"} onSubmit={(e) => { if (confirm && !window.confirm(confirm)) e.preventDefault(); }}>
+    <form action={act} className={className ?? "space-y-3"}>
       {children}
-      <button className={quiet ? "btn-ghost !px-2 !py-1 text-sm" : "btn"} disabled={pending}>{pending ? "…" : submit}</button>
+      {confirm ? (
+        <ConfirmButton message={confirm} title={submit} confirmLabel={submit} danger className={quiet ? "btn-link-danger" : "btn-danger"}>{submit}</ConfirmButton>
+      ) : (
+        <button className={quiet ? "btn-ghost !px-2 !py-1 text-sm" : "btn"} disabled={pending}>{pending ? "Working…" : submit}</button>
+      )}
       {state?.error && <p className="rounded bg-red-50 p-2 text-sm text-red-700" role="alert">{state.error}</p>}
       {state?.info && <p className="text-sm text-green-800" role="status">{state.info}</p>}
       {state?.reveal && (

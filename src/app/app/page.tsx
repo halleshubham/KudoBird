@@ -2,6 +2,7 @@ import Link from "next/link";
 import { currentPeriod, LIMIT_KEYS, usageOverview } from "@/server/entitlements";
 import { getDashboard } from "@/server/dashboard";
 import { requireOrg } from "@/server/session";
+import { EmptyState, PageHeader } from "@/components/ui";
 import { ActivityChart } from "./dashboard-parts/ActivityChart";
 
 const LIMIT_LABEL: Record<string, string> = { campaigns: "Campaigns", members: "Members", certificatesPerMonth: "Certificates this month", emailsPerMonth: "Emails this month", storageBytes: "Storage" };
@@ -22,10 +23,24 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   return (
     <div className="space-y-6">
       {forbidden && <p className="rounded-md bg-red-50 p-2 text-sm text-red-700">You do not have permission to view that page.</p>}
-      <div>
-        <h1 className="text-2xl font-bold">{meta.org.name}</h1>
-        <p className="text-sm text-neutral-600">Plan: {meta.org.plan.name} · public page <Link className="text-brand-700 underline" href={`/o/${meta.org.slug}`} target="_blank">/o/{meta.org.slug}</Link></p>
-      </div>
+      <PageHeader title={meta.org.name} description={<>{meta.org.plan.name} plan · public page <Link className="text-brand-700 underline" href={`/o/${meta.org.slug}`} target="_blank" rel="noreferrer">/o/{meta.org.slug}<span className="sr-only"> (opens in a new tab)</span></Link></>} />
+      {d.totals.entries === 0 && (
+        <section className="card" aria-labelledby="getting-started">
+          <h2 id="getting-started" className="font-semibold">Get your first certificate out</h2>
+          <ol className="mt-3 space-y-2 text-sm">
+            {[
+              [d.topCampaigns.length > 0, "Create a campaign", "/app/campaigns", "A campaign is the cause or event you are thanking people for."],
+              [false, "Make the certificate yours", d.topCampaigns[0] ? `/app/campaigns/${d.topCampaigns[0].id}/design` : "/app/campaigns", "Pick a layout, add your logo and signatures."],
+              [false, "Share the public link", d.topCampaigns[0] ? `/app/campaigns/${d.topCampaigns[0].id}` : "/app/campaigns", "People fill the form and get their certificate right away."],
+            ].map(([done, title, href, text], i) => (
+              <li key={i} className="flex gap-3">
+                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${done ? "bg-green-600 text-white" : "border border-black/20 text-neutral-500"}`}>{done ? "✓" : i + 1}</span>
+                <span><Link href={href as string} className="font-medium text-brand-700 hover:underline">{title as string}</Link><span className="block text-neutral-600">{text as string}</span></span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Tile label="Certificates issued" value={d.totals.certificates} />
         <Tile label="This month" value={d.totals.thisMonth} />
@@ -36,7 +51,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </div>
       <section className="card space-y-2">
         <h2 className="font-semibold">Certificates issued, last {d.days} days</h2>
-        <ActivityChart series={d.series} />
+        {d.totals.certificates === 0 ? <EmptyState title="No certificates yet">They will show up here as soon as people submit your public form.</EmptyState> : <ActivityChart series={d.series} />}
       </section>
       <div className="grid gap-4 md:grid-cols-2">
         <section className="card">

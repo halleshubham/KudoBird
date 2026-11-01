@@ -33,7 +33,7 @@ export function BulkUploader({ campaignId, actions }: { campaignId: string; acti
       <div className="card space-y-2 text-sm">
         <p className="font-semibold">1. Upload a CSV</p>
         <p className="text-neutral-600">Columns: <code>name</code>, <code>mobile</code>, optional <code>email</code>, plus any of the campaign&apos;s custom field keys. Up to 2,000 rows. <a className="text-brand-700 underline" href={`/api/campaigns/${campaignId}/bulk-template`}>Download a template</a>.</p>
-        <input type="file" accept=".csv,text/csv" className="input" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+        <input type="file" aria-label="Choose a CSV file" accept=".csv,text/csv" className="input" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
         {pending && <p className="text-neutral-500" role="status">Checking {fileName}…</p>}
         {error && <p className="rounded bg-red-50 p-2 text-red-700" role="alert">{error}</p>}
       </div>

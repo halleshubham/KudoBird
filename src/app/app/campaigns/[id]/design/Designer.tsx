@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { designFonts, type Design, type BlockKey } from "@/server/render/design";
+import { ConfirmButton } from "@/components/ConfirmButton";
 import { renderCertificateHtml } from "@/server/render/html";
 
 type Preset = { key: string; name: string; description: string; design: Design };
@@ -94,16 +95,16 @@ export function Designer(props: {
 
   const dis = !props.canEdit;
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-      <div className="space-y-3 text-sm">
-        <fieldset disabled={dis} className="space-y-3">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-3 text-sm">
+        <fieldset disabled={dis} className="min-w-0 space-y-3">
           <details open className="card"><summary className="cursor-pointer font-semibold">Starting layout</summary>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {props.presets.map((p) => (
-                <button key={p.key} type="button" className={`rounded border p-2 text-left ${design.preset === p.key ? "border-brand-600 bg-brand-50" : "border-neutral-200"}`}
-                  onClick={() => { if (confirm("Replace the current design with this preset?")) setDesign(structuredClone(p.design)); }}>
-                  <span className="font-medium">{p.name}</span><br /><span className="text-xs text-neutral-500">{p.description}</span>
-                </button>
+                <ConfirmButton key={p.key} className={`rounded-xl border p-2 text-left ${design.preset === p.key ? "border-brand-600 bg-brand-50" : "border-black/10 hover:bg-neutral-50"}`}
+                  title="Replace the current design?" confirmLabel="Replace design" message={`Switch to “${p.name}”? Your current colours, fonts and text are replaced. Nothing changes for issued certificates until you save a new version.`} onConfirm={() => setDesign(structuredClone(p.design))}>
+                  <span className="block font-medium">{p.name}</span><span className="block text-xs text-neutral-600">{p.description}</span>
+                </ConfirmButton>
               ))}
             </div>
           </details>

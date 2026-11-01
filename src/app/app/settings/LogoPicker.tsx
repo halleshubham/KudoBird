@@ -8,7 +8,7 @@ export function LogoPicker({ orgSlug, hasLogo, setLogo }: { orgSlug: string; has
   return (
     <div className="space-y-2 text-sm">
       {has && /* eslint-disable-next-line @next/next/no-img-element */ <img key={v} src={`/o/${orgSlug}/logo?v=${v}`} alt="" className="h-14 w-auto rounded border bg-white p-1" />}
-      <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="input" onChange={async (e) => {
+      <input type="file" aria-label="Choose a logo file" accept="image/png,image/jpeg,image/svg+xml" className="input" onChange={async (e) => {
         const f = e.target.files?.[0]; if (!f) return;
         const fd = new FormData(); fd.set("file", f); fd.set("kind", "LOGO");
         const up = await fetch("/api/assets", { method: "POST", body: fd }); const j = await up.json();

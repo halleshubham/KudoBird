@@ -34,7 +34,7 @@ export function ActivityChart({ series, unit = "certificate" }: { series: { date
             return (
               <g key={s.date}>
                 {/* generous invisible hit target, larger than the mark */}
-                <rect x={PAD.l + i * step} y={PAD.t} width={step} height={innerH} fill="transparent" tabIndex={0} aria-label={`${fmt(s.date)}: ${s.count}`}
+                <rect x={PAD.l + i * step} y={PAD.t} width={step} height={innerH} fill="transparent" tabIndex={0} role="img" aria-label={`${fmt(s.date)}: ${s.count}`}
                   onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)} />
                 {s.count > 0 && <path d={`M${x},${PAD.t + innerH} v${-(h - 4)} a4,4 0 0 1 4,-4 h${bar - 8} a4,4 0 0 1 4,4 v${h - 4} z`} fill="#0b6cf0" opacity={hover === null || hover === i ? 1 : 0.45} pointerEvents="none" />}
               </g>

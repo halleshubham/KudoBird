@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppNav, OrgSwitcher, UserMenu } from "@/components/AppShell";
 import { Logo } from "@/components/Logo";
 import { can } from "@/server/permissions";
 import { requireOrg } from "@/server/session";
@@ -27,25 +28,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       )}
       {announcement && <div className="bg-brand-50 px-4 py-2 text-center text-sm text-brand-700" role="status">{announcement}</div>}
-      <header className="sticky top-0 z-10 border-b border-black/10 bg-white/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
-          <Link href="/app" className="text-lg"><Logo /></Link>
-          <form action={switchOrgAction}>
-            <select name="orgId" defaultValue={ctx.orgId} className="input !w-auto" aria-label="Organisation">
-              {orgs.map((o) => <option key={o.org.id} value={o.org.id}>{o.org.name}</option>)}
-            </select>
-            <button className="btn-ghost ml-2">Switch</button>
-          </form>
-          <nav className="flex flex-wrap gap-1 text-sm">
-            {nav.map((n) => <Link key={n.href} href={n.href} className="rounded-lg px-3 py-1.5 font-medium text-neutral-600 transition-colors hover:bg-black/5 hover:text-neutral-900">{n.label}</Link>)}
-          </nav>
-          <form action={logoutAction} className="ml-auto text-sm">
-            <span className="mr-3 text-neutral-500">{user.email} · {role.toLowerCase()}</span>
-            <button className="font-medium text-brand-700 hover:underline">Sign out</button>
-          </form>
+      <a href="#content" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:shadow">Skip to content</a>
+      <header className="sticky top-0 z-10 border-b border-black/10 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+          <Link href="/app" className="text-lg" aria-label="KudoBird home"><Logo /></Link>
+          <OrgSwitcher orgs={orgs.map((o) => ({ id: o.org.id, name: o.org.name }))} current={ctx.orgId} action={switchOrgAction} />
+          <div className="order-last w-full min-w-0 md:order-none md:w-auto md:flex-1"><AppNav items={nav} /></div>
+          <div className="ml-auto md:ml-0"><UserMenu email={user.email} role={role} logout={logoutAction} /></div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <main id="content" className="mx-auto max-w-6xl px-4 py-8">{children}</main>
     </div>
   );
 }

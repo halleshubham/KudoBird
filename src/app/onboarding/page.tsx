@@ -11,7 +11,7 @@ export default async function Onboarding() {
   if (mine.length > 0) redirect(mine.some((o) => o.org.status === "ACTIVE") ? "/app" : "/suspended");
   return (
     <AuthShell title="Name your organisation. This becomes your workspace.">
-      <ActionForm action={createOrgAction} submit="Create workspace">
+      <ActionForm fullWidth action={createOrgAction} submit="Create workspace">
         <Field name="name" label="Organisation name" required />
       </ActionForm>
     </AuthShell>

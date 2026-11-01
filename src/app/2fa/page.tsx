@@ -21,7 +21,7 @@ export default async function TwoFactor() {
           <p className="break-all text-xs text-neutral-500">Or enter manually: {setup!.secret}</p>
         </div>
       )}
-      <ActionForm action={verifyTotpAction} submit="Verify">
+      <ActionForm fullWidth action={verifyTotpAction} submit="Verify">
         <Field name="code" label="6-digit code" inputMode="numeric" autoComplete="one-time-code" required />
       </ActionForm>
     </AuthShell>
