@@ -13,13 +13,17 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "create-super-admin": "tsx scripts/create-super-admin.ts"
+    "create-super-admin": "tsx scripts/create-super-admin.ts",
+    "fonts:sync": "tsx scripts/fonts.ts sync",
+    "fonts:bundle": "tsx scripts/fonts.ts bundle"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
     "@prisma/client": "^6.19.3",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.2.0",
     "dotenv": "^18.0.9",
+    "ioredis": "^6.0.0",
     "next": "^15.5.28",
     "otplib": "^12.0.1",
     "qrcode": "^1.5.4",

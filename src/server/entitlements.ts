@@ -69,7 +69,7 @@ export async function loadEntitlements(tx: Tx, orgId: string): Promise<Effective
 export async function getUsage(tx: Tx, orgId: string, key: LimitKey): Promise<number> {
   // Structural counts come from the tables themselves.
   if (key === "members") return tx.membership.count({ where: { orgId } });
-  // "campaigns" is a gauge maintained by the campaigns module (arrives in stage 2).
+  if (key === "campaigns") return tx.campaign.count({ where: { orgId, archivedAt: null } });
   const metric = METRIC_FOR_LIMIT[key];
   return readCounter(tx, orgId, metric, MONTHLY[key] ? currentPeriod() : "total");
 }

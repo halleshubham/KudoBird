@@ -3,7 +3,7 @@
 Multi-tenant platform for issuing contribution / participation certificates for any organisation, campaign or event.
 Free for now; plans, limits and feature flags are already wired through one entitlement service.
 
-> Status: **Stage 1 of 7** (auth, organisations, roles, tenancy). See the roadmap at the bottom.
+> Status: **Stage 2 of 7** (campaigns, public form, certificate designer). See the roadmap at the bottom.
 
 ## Stack
 
@@ -18,7 +18,8 @@ pnpm install
 cp .env.example .env          # edit AUTH_SECRET (32+ random chars)
 docker compose up -d postgres redis
 pnpm exec prisma migrate deploy
-pnpm db:seed                  # creates the Free plan
+pnpm db:seed                  # Free plan, starter templates, super admin, demo org + Marathi campaign
+pnpm fonts:sync               # optional: import the full Google Fonts catalogue (needs internet once)
 pnpm dev                      # http://localhost:3000
 ```
 
@@ -39,8 +40,23 @@ Without `RESEND_API_KEY`, emails are printed to the server console (verification
 | `GOOGLE_CLIENT_ID/SECRET` | Optional Google sign-in (redirect URI: `$APP_URL/auth/google/callback`) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Email delivery |
 | `SENTRY_DSN` | Optional error monitoring |
+| `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile bot check on the public form. Unset = bot check is skipped (dev). **Set both in production.** |
+| `STORAGE_DRIVER` | `local` (default, `STORAGE_DIR`) or `s3` (`S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`; works with Cloudflare R2) |
+| `FONT_CACHE_DIR` | Where downloaded Google fonts are cached (default `./storage/fonts`) |
 
 The environment is validated at startup; the app refuses to run with a clear message if something is missing or invalid.
+
+## Demo data
+
+`pnpm db:seed` creates a working demo (idempotent):
+
+| What | Value |
+|---|---|
+| Demo org owner | `demo@kudobird.local` / `demo-password-123` |
+| Public form (Marathi, Noto Serif Devanagari) | `/o/demo/baliraja-diwali` |
+| Super admin | `admin@kudobird.local` / `admin-password-123` (override with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`; 2FA is forced at first sign-in) |
+
+Change these before exposing an instance to the internet.
 
 ## First super admin
 
@@ -62,6 +78,23 @@ query to the organisation set in the transaction (`app.org_id`). The app connect
 `BYPASSRLS`, and all tenant access goes through `withTenant()` (`src/server/db.ts`). A forgotten `where` clause therefore
 cannot leak data. `withPlatform()` is the single audited bypass for super admin, workers and public pages.
 `tests/tenant-isolation.test.ts` proves an org cannot read, insert, update or delete another org's rows.
+
+## Campaigns, form and designer
+
+Create a campaign (*Campaigns -> New*), set it **Active**, and share `/o/{org}/{campaign}`. Under the campaign:
+
+- **Form**: Full name, mobile (default +91, 10 digits, country configurable) and optional email are built in. Add custom fields (text, number, date, select, textarea) with required/validation, Hindi/Marathi labels, and a flag for use on the certificate. Their `key` becomes a `{{key}}` placeholder.
+- **Overview**: approval mode, duplicate policy (return existing / block / allow), consent text, optional mobile OTP (console provider only for now), bot protection, languages (Marathi/Hindi/English with an in-page switch), share text and hashtags.
+- **Certificate design**: four starter layouts (classic, modern, minimal, Indian festive), per-block font/size/weight/alignment/colour, background, borders, logos, ordered signatories, QR toggle, and a live preview at every output size. Every save creates a new immutable **template version**.
+- **Signatories** (org library): upload a PNG signature with a transparent background, name and designation; reuse across campaigns.
+
+Mobile numbers and emails are encrypted at rest, masked in lists, and revealing one is written to the audit log.
+
+## Fonts
+
+Bundled in `assets/fonts` (works offline): **Noto Serif Devanagari** (default), Noto Sans Devanagari, Mukta, Tiro Devanagari Marathi.
+`pnpm fonts:sync` imports the Google Fonts catalogue (about 1,900 families, no API key needed) so the designer can search all of it, filter by script, and shows a curated shortlist first.
+A font used by a template is downloaded once into `FONT_CACHE_DIR`, and rendering embeds it from disk. It never depends on a live network call.
 
 ## Plans and entitlements
 
@@ -89,7 +122,7 @@ Put the `web` service behind a TLS-terminating proxy (Caddy/nginx). Back up Post
 ## Roadmap
 
 1. ✅ Auth, orgs, roles, tenancy
-2. Campaigns, public form, certificate designer
+2. ✅ Campaigns, public form, certificate designer
 3. Rendering worker and certificate pages
 4. Sharing and Resend emails (demo checkpoint)
 5. Dashboard, bulk issue, audit log

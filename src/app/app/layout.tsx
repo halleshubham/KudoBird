@@ -7,6 +7,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { user, ctx, orgs, role } = await requireOrg();
   const nav = [
     { href: "/app", label: "Dashboard", show: true },
+    { href: "/app/campaigns", label: "Campaigns", show: can(role, "campaigns.view") },
+    { href: "/app/signatories", label: "Signatories", show: can(role, "campaigns.view") },
     { href: "/app/members", label: "Members", show: can(role, "members.view") },
     { href: "/app/settings", label: "Settings", show: can(role, "org.view") },
     { href: "/app/audit", label: "Audit log", show: can(role, "audit.view") },

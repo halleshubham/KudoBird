@@ -28,6 +28,24 @@ enum AuthTokenType {
   PASSWORD_RESET
 }
 
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum EntryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AssetKind {
+  LOGO
+  SIGNATURE
+  BACKGROUND
+}
+
 enum SubscriptionStatus {
   ACTIVE
   TRIALING
@@ -132,6 +150,11 @@ model Organization {
   subscriptions Subscription[]
   usage         UsageCounter[]
   auditLogs     AuditLog[]
+  campaigns     Campaign[]
+  templates     Template[]
+  signatories   Signatory[]
+  assets        Asset[]
+  entries       Entry[]
 }
 
 model Membership {
@@ -208,5 +231,146 @@ model AuditLog {
 
   org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
+  @@index([orgId, createdAt])
+}
+
+// Global font catalogue (synced from Google Fonts metadata). Files are cached on disk.
+model Font {
+  id         String   @id @default(uuid()) @db.Uuid
+  family     String   @unique
+  category   String?
+  subsets    String[]
+  weights    Int[]
+  popularity Int      @default(100000) // lower = more popular
+  curated    Boolean  @default(false) // shown first in pickers
+  bundled    Boolean  @default(false) // ships with the app
+  updatedAt  DateTime @updatedAt
+
+  @@index([popularity])
+}
+
+model Asset {
+  id         String    @id @default(uuid()) @db.Uuid
+  orgId      String    @db.Uuid
+  kind       AssetKind
+  storageKey String
+  mime       String
+  bytes      Int
+  filename   String
+  createdAt  DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, kind])
+}
+
+model Signatory {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  name        String
+  designation String
+  assetId     String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  org       Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  campaigns CampaignSignatory[]
+
+  @@index([orgId])
+}
+
+// orgId NULL = global template managed by the super admin (read-only for orgs, clonable)
+model Template {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String?  @db.Uuid
+  name          String
+  description   String?
+  preset        String
+  latestVersion Int      @default(1)
+  createdAt     DateTime @default(now())
+
+  org       Organization?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  versions  TemplateVersion[]
+  campaigns Campaign[]
+
+  @@index([orgId])
+}
+
+// Immutable once written: issued certificates reference the exact version used.
+model TemplateVersion {
+  id         String   @id @default(uuid()) @db.Uuid
+  templateId String   @db.Uuid
+  orgId      String?  @db.Uuid
+  version    Int
+  design     Json
+  createdById String? @db.Uuid
+  createdAt  DateTime @default(now())
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+}
+
+model Campaign {
+  id           String         @id @default(uuid()) @db.Uuid
+  orgId        String         @db.Uuid
+  name         String
+  slug         String
+  description  String?
+  status       CampaignStatus @default(DRAFT)
+  locale       String         @default("mr")
+  numberPrefix String
+  numberSeq    Int            @default(0)
+  templateId   String?        @db.Uuid
+  // Validated by zod (src/server/campaigns/schema.ts)
+  settings     Json           @default("{}")
+  formFields   Json           @default("[]")
+  createdAt    DateTime       @default(now())
+  archivedAt   DateTime?
+
+  org         Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  template    Template?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  signatories CampaignSignatory[]
+  entries     Entry[]
+
+  @@unique([orgId, slug])
+}
+
+model CampaignSignatory {
+  id          String @id @default(uuid()) @db.Uuid
+  orgId       String @db.Uuid
+  campaignId  String @db.Uuid
+  signatoryId String @db.Uuid
+  position    Int    @default(0)
+
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  signatory Signatory @relation(fields: [signatoryId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, signatoryId])
+}
+
+model Entry {
+  id           String      @id @default(uuid()) @db.Uuid
+  orgId        String      @db.Uuid
+  campaignId   String      @db.Uuid
+  name         String
+  mobileEnc    String // AES-GCM
+  mobileHash   String // keyed blind index, scoped per campaign (duplicate detection)
+  emailEnc     String?
+  emailHash    String?
+  customData   Json        @default("{}")
+  status       EntryStatus @default(PENDING)
+  consentAt    DateTime?
+  consentText  String?
+  wallOptIn    Boolean     @default(false)
+  locale       String      @default("en")
+  ipHash       String?
+  createdAt    DateTime    @default(now())
+  reviewedById String?     @db.Uuid
+  reviewedAt   DateTime?
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  campaign Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, mobileHash])
   @@index([orgId, createdAt])
 }
