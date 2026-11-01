@@ -3,7 +3,7 @@
 Multi-tenant platform for issuing contribution / participation certificates for any organisation, campaign or event.
 Free for now; plans, limits and feature flags are already wired through one entitlement service.
 
-> Status: **Stage 5 of 7** (dashboard, bulk issue, audit log, privacy tools). Stages 6 and 7 are still to come. See the roadmap at the bottom.
+> Status: **Stage 6 of 7** (super admin panel). Stage 7 (public API, outgoing webhooks, embeds) is still to come. See the roadmap at the bottom.
 
 ## Stack
 
@@ -155,6 +155,24 @@ Contributor emails count against the plan's `emailsPerMonth`; the default sender
 
 Consent text and stated purpose are shown on the form and the consent time and wording are stored per entry. For a request from a person: **Export data** (JSON of everything held about them) and **Erase data** (name, mobile, email and custom answers are irreversibly blanked, images are deleted, the certificate is revoked as "erased"; the number stays so numbering is not disturbed). Both are audit-logged, and need the manage-entries permission. **Retention**: set "Erase contributors' personal data after N days" on a campaign and the worker erases older entries daily (03:30 IST). Mobile numbers and emails are encrypted at rest and masked in lists.
 
+## Platform admin panel (`/admin`)
+
+Only users flagged `isSuperAdmin` **who have set up 2FA** can use it. A platform admin without an authenticator is sent to enrol on first sign-in; the panel is unreachable until then. Every admin function also re-checks this in the database, so it does not rely on page guards alone.
+
+| Area | What you can do |
+|---|---|
+| Overview | Orgs, users, certificates, entries, emails and storage across the platform; 30-day charts of certificates and sign-ups; top orgs; plan mix; email health (bounce/complaint rates); render and email queue depth; failed renders |
+| Organisations | Search; create an org for an owner (existing user becomes owner, otherwise an invitation is emailed); change plan; per-org limit and feature overrides; suspend / reactivate; delete (recoverable) and **purge** (needs prior deletion and typing the org's address; removes all data and stored files) |
+| Support access | Sign in as an org member to help them. Requires a written reason; refuses other admins, disabled users, non-members and inactive orgs; lasts 60 minutes; is **pinned to that one organisation**; is recorded in the org's own audit log and a support-access log its owners/admins can read; **owners are emailed**; actions taken are attributed to the admin; an "End support session" bar is always visible |
+| Users | Search; disable (signs them out everywhere); send a password reset; reset 2FA; promote / demote platform admins (not yourself) |
+| Plans | Create and edit plans (limits and feature flags). This is how paid tiers get switched on later: edit plans here, no code changes |
+| Templates | Manage the starter gallery (create from a preset, edit design JSON as a new version, rename, delete). Organisations that cloned one keep their copy |
+| Fonts | Sync the Google Fonts catalogue, curate the shortlist (a re-sync never overwrites your curation), pre-cache a font so its first render never needs the network |
+| Settings | Open/close new sign-ups, which plan new orgs start on, an announcement banner |
+| Audit | Platform-level actions (settings, plans, fonts, user management, impersonation) and every organisation's audit log in one place |
+
+A suspended organisation: members see a "Workspace unavailable" page, its public form stops accepting entries and its public page disappears. Certificates already issued stay verifiable at `/c/{id}`.
+
 ## Plans and entitlements
 
 `src/server/entitlements.ts` is the only place that decides whether an org may do something
@@ -185,5 +203,5 @@ Put the `web` service behind a TLS-terminating proxy (Caddy/nginx). Back up Post
 3. ✅ Rendering worker and certificate pages
 4. ✅ Sharing and Resend emails (demo checkpoint)
 5. ✅ Dashboard, bulk issue, audit log
-6. Super admin panel
+6. ✅ Super admin panel
 7. API, webhooks, embeds

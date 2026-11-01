@@ -63,6 +63,7 @@ enum EmailKind {
   REJECTED
   ADMIN_ENTRY
   ADMIN_DIGEST
+  SUPPORT_ACCESS
 }
 
 enum EmailStatus {
@@ -204,6 +205,7 @@ model Organization {
   certificates  Certificate[]
   emailLogs     EmailLog[]
   events        CertificateEvent[]
+  impersonations ImpersonationLog[]
 }
 
 model Membership {
@@ -507,4 +509,34 @@ model CertificateEvent {
 model ProcessedWebhook {
   id        String   @id
   createdAt DateTime @default(now())
+}
+
+// Every time platform staff acted as an org user. Visible to the org (owners/admins) so support access is never hidden.
+model ImpersonationLog {
+  id           String    @id @default(uuid()) @db.Uuid
+  orgId        String    @db.Uuid
+  adminId      String    @db.Uuid
+  adminEmail   String
+  targetUserId String    @db.Uuid
+  targetEmail  String
+  reason       String
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, startedAt])
+}
+
+// Platform-level actions that belong to no organisation (settings, fonts, plans, user management).
+model PlatformAudit {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String   @db.Uuid
+  action    String
+  entity    String?
+  entityId  String?
+  meta      Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

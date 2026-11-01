@@ -6,7 +6,7 @@ import { hashToken, newToken } from "./crypto";
 import { prisma, withPlatform, withTenant, withUser, type TenantContext } from "./db";
 import { sendEmail } from "./email";
 import { ActionEmail } from "./email/templates";
-import { assertWithinLimit, ensureDefaultPlan } from "./entitlements";
+import { assertWithinLimit, defaultPlanFor } from "./entitlements";
 import { env } from "./env";
 import { assertCan, canManageRole, ForbiddenError } from "./permissions";
 import { slugify } from "./slug";
@@ -29,7 +29,7 @@ export class OrgError extends Error {
 export async function createOrganization(userId: string, name: string) {
   const orgId = randomUUID();
   const base = slugify(name);
-  const plan = await withPlatform((tx) => ensureDefaultPlan(tx));
+  const plan = await withPlatform((tx) => defaultPlanFor(tx));
   for (let attempt = 0; attempt < 5; attempt++) {
     const slug = attempt === 0 ? base : `${base}-${randomUUID().slice(0, 4)}`;
     try {
@@ -211,4 +211,14 @@ export async function queryAuditLog(ctx: OrgContext, q: AuditQuery = {}) {
   const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true } }) : [];
   const email = (id: string | null) => (id ? users.find((u) => u.id === id)?.email ?? "unknown" : null);
   return { total, pageSize, actions, rows: rows.map((r) => ({ ...r, actorEmail: email(r.actorId), impersonatorEmail: email(r.impersonatorId) })) };
+}
+
+/**
+ * Which organisations a session may use. Inactive (suspended/deleted) orgs are excluded, and a support
+ * (impersonation) session is pinned to the single organisation it was opened for, so it can never roam into the
+ * target user's other organisations, which were never told about it.
+ */
+export function usableOrgs<T extends { org: { id: string; status: string } }>(all: T[], session: { activeOrgId: string | null; impersonatorId: string | null }): T[] {
+  const scoped = session.impersonatorId ? all.filter((o) => o.org.id === session.activeOrgId) : all;
+  return scoped.filter((o) => o.org.status === "ACTIVE");
 }

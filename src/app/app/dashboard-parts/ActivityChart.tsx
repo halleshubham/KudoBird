@@ -5,7 +5,7 @@ import { useState } from "react";
  * Certificates issued per day. One series, one hue, thin rounded bars on a shared baseline, recessive grid,
  * hover/focus tooltip, and the same numbers available as a table (never colour-only or hover-only).
  */
-export function ActivityChart({ series }: { series: { date: string; count: number }[] }) {
+export function ActivityChart({ series, unit = "certificate" }: { series: { date: string; count: number }[]; unit?: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const W = 640, H = 200, PAD = { l: 32, r: 8, t: 12, b: 26 };
   const max = Math.max(1, ...series.map((s) => s.count));
@@ -21,7 +21,7 @@ export function ActivityChart({ series }: { series: { date: string; count: numbe
   return (
     <div className="space-y-2">
       <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Certificates issued per day, ${total} in the last ${series.length} days`} className="w-full">
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${unit}s per day, ${total} in the last ${series.length} days`} className="w-full">
           {[0, 0.5, 1].map((f) => (
             <g key={f}>
               <line x1={PAD.l} x2={W - PAD.r} y1={y(niceMax * f)} y2={y(niceMax * f)} stroke="#e5e7eb" strokeWidth={1} />
@@ -47,13 +47,13 @@ export function ActivityChart({ series }: { series: { date: string; count: numbe
         </svg>
         {active && (
           <div className="pointer-events-none absolute top-0 rounded-md border bg-white px-2 py-1 text-xs shadow" style={{ left: `${Math.min(80, Math.max(0, ((PAD.l + (hover! + 0.5) * step) / W) * 100 - 8))}%` }} role="status">
-            <p className="text-gray-500">{fmt(active.date)}</p><p className="font-semibold">{active.count} certificate{active.count === 1 ? "" : "s"}</p>
+            <p className="text-gray-500">{fmt(active.date)}</p><p className="font-semibold">{active.count} {unit}{active.count === 1 ? "" : "s"}</p>
           </div>
         )}
       </div>
       <details className="text-xs text-gray-600">
         <summary className="cursor-pointer">View as table</summary>
-        <table className="mt-2 w-full max-w-xs text-left"><thead><tr><th className="py-1">Date</th><th>Certificates</th></tr></thead>
+        <table className="mt-2 w-full max-w-xs text-left"><thead><tr><th className="py-1">Date</th><th className="capitalize">{unit}s</th></tr></thead>
           <tbody>{series.filter((s) => s.count > 0).map((s) => <tr key={s.date} className="border-t"><td className="py-1">{fmt(s.date)}</td><td>{s.count}</td></tr>)}</tbody></table>
       </details>
     </div>

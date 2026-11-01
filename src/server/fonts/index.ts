@@ -33,8 +33,9 @@ export async function syncFontCatalogue(): Promise<number> {
     curated: curated.has(f.family),
     bundled: bundled.has(f.family),
   }));
+  // Admin curation wins: a re-sync refreshes metadata (subsets, weights, popularity) but never touches curated/bundled of existing rows.
   for (let i = 0; i < rows.length; i += 100) {
-    await prisma.$transaction(rows.slice(i, i + 100).map((r) => prisma.font.upsert({ where: { family: r.family }, create: r, update: r })));
+    await prisma.$transaction(rows.slice(i, i + 100).map((r) => prisma.font.upsert({ where: { family: r.family }, create: r, update: { category: r.category, subsets: r.subsets, weights: r.weights, popularity: r.popularity } })));
   }
   return rows.length;
 }

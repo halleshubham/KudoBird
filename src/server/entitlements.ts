@@ -119,3 +119,11 @@ export const FREE_PLAN = {
 export async function ensureDefaultPlan(tx: Tx = prisma as unknown as Tx): Promise<Plan> {
   return tx.plan.upsert({ where: { key: FREE_PLAN.key }, update: {}, create: FREE_PLAN });
 }
+
+/** The plan new organisations start on: the platform setting, else the plan flagged default, else Free. */
+export async function defaultPlanFor(tx: Tx): Promise<Plan> {
+  const row = await tx.platformSetting.findUnique({ where: { key: "general" } });
+  const key = (row?.value as { defaultPlanKey?: string } | undefined)?.defaultPlanKey;
+  const chosen = key ? await tx.plan.findFirst({ where: { key, active: true } }) : null;
+  return chosen ?? (await tx.plan.findFirst({ where: { isDefault: true, active: true } })) ?? ensureDefaultPlan(tx);
+}

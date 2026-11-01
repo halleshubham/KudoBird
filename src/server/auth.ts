@@ -4,6 +4,7 @@ import { decrypt, encrypt, hashPassword, hashToken, newToken, verifyPassword } f
 import { prisma } from "./db";
 import { env } from "./env";
 import { sendEmail } from "./email";
+import { assertSignupsOpen, SignupsClosedError } from "./platform-settings";
 import { ActionEmail } from "./email/templates";
 import * as React from "react";
 
@@ -16,6 +17,10 @@ export class AuthError extends Error {
   }
 }
 
+async function guardSignups() {
+  try { await assertSignupsOpen(); } catch (e) { if (e instanceof SignupsClosedError) throw new AuthError("SIGNUPS_CLOSED", e.message); throw e; }
+}
+
 export const normalizeEmail = (e: string) => e.trim().toLowerCase();
 
 // ---------------------------------------------------------------- users
@@ -25,6 +30,7 @@ export async function registerUser(input: { email: string; password: string; nam
   if (input.password.length < 8) throw new AuthError("WEAK_PASSWORD", "Password must be at least 8 characters");
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing?.passwordHash) throw new AuthError("EMAIL_TAKEN", "An account with this email already exists");
+  if (!existing) await guardSignups();
   const passwordHash = await hashPassword(input.password);
   // A magic-link-only account may already exist; attach the password to it.
   const user = existing
@@ -70,7 +76,8 @@ export async function sendAuthLink(type: AuthTokenType, user: Pick<User, "id" | 
 /** Magic links work for new and existing users; the first successful use verifies the email. */
 export async function requestMagicLink(emailRaw: string, next?: string): Promise<void> {
   const email = normalizeEmail(emailRaw);
-  const user = (await prisma.user.findUnique({ where: { email } })) ?? (await prisma.user.create({ data: { email } }));
+  let user = await prisma.user.findUnique({ where: { email } });
+  if (!user) { await guardSignups(); user = await prisma.user.create({ data: { email } }); }
   if (user.disabledAt) return; // silent: do not reveal account state
   await sendAuthLink("MAGIC_LINK", user, next);
 }
@@ -190,7 +197,7 @@ export async function loginWithGoogleCode(code: string): Promise<User> {
   const existing = (await prisma.user.findUnique({ where: { googleId: info.sub } })) ?? (await prisma.user.findUnique({ where: { email } }));
   const user = existing
     ? await prisma.user.update({ where: { id: existing.id }, data: { googleId: info.sub, emailVerifiedAt: existing.emailVerifiedAt ?? new Date() } })
-    : await prisma.user.create({ data: { email, name: info.name, googleId: info.sub, emailVerifiedAt: new Date() } });
+    : await (async () => { await guardSignups(); return prisma.user.create({ data: { email, name: info.name, googleId: info.sub, emailVerifiedAt: new Date() } }); })();
   if (user.disabledAt) throw new AuthError("DISABLED", "This account is disabled");
   return user;
 }
