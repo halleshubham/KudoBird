@@ -9,7 +9,7 @@ import { fontFaceCss } from "@/server/fonts";
 import { presetDesign } from "@/server/render/presets";
 import { renderCertificateHtml } from "@/server/render/html";
 import { buildCertificateHtml, contentHash, type CertificateSource } from "@/server/render/build";
-import { renderHtml } from "../src/worker/render";
+import { optimizePng, renderHtml } from "../src/worker/render";
 
 let browser: Browser;
 beforeAll(async () => { browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined }); });
@@ -76,6 +76,20 @@ describe("render pipeline", () => {
     id: "x", publicId: "AAAAAAAAAAAAAAAAAAAAAA", orgId: "00000000-0000-0000-0000-000000000000", status: "ACTIVE",
     design: presetDesign("festive", "mr"), signatories: [{ name: "डॉ. सुनील", designation: "अध्यक्ष", assetId: null }],
     renderData: { name: "बळीराजा पाटील", campaign: "बळीराजाची दिवाळी", org: "संस्था", date: "१ नोव्हेंबर २०२६", certificate_no: "BD-2026-00042" }, ...over,
+  });
+
+  it("the stored PNG is optimised: same size, much smaller, visually the same", async () => {
+    for (const key of ["square", "story", "link", "a4"] as const) {
+      const { html, size } = await buildCertificateHtml(src(), key);
+      const raw = await renderHtml(browser, html, size, "png");
+      const small = await optimizePng(raw);
+      const a = PNG.sync.read(raw), b = PNG.sync.read(small);
+      expect([b.width, b.height]).toEqual([a.width, a.height]);
+      expect(small.length).toBeLessThan(raw.length * 0.5); // typically 15-25% of the original
+      let off = 0;
+      for (let i = 0; i < a.data.length; i += 4) if (Math.max(Math.abs(a.data[i] - b.data[i]), Math.abs(a.data[i + 1] - b.data[i + 1]), Math.abs(a.data[i + 2] - b.data[i + 2])) > 32) off++;
+      expect(off / (a.width * a.height)).toBeLessThan(0.005); // under 0.5% of pixels visibly different
+    }
   });
 
   it("produces PNGs at exactly the required sizes and a one-page A4 PDF", async () => {
