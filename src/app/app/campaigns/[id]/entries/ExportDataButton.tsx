@@ -6,7 +6,7 @@ export function ExportDataButton({ entryId, action }: { entryId: string; action:
   const [err, setErr] = useState("");
   return (
     <span>
-      <button type="button" className="text-gray-700" title="Download all data held about this person (DPDP request)" onClick={async () => {
+      <button type="button" className="text-neutral-700" title="Download all data held about this person (DPDP request)" onClick={async () => {
         const r = await action(entryId);
         if (r.error) return setErr(r.error);
         const url = URL.createObjectURL(new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" }));

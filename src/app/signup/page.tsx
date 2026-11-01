@@ -11,7 +11,7 @@ export default function Signup() {
         <Field name="email" label="Email" type="email" autoComplete="email" required />
         <Field name="password" label="Password (min 8 characters)" type="password" autoComplete="new-password" minLength={8} required />
       </ActionForm>
-      <p className="text-sm text-gray-600">Already registered? <Link href="/login" className="text-brand-700">Sign in</Link></p>
+      <p className="text-sm text-neutral-600">Already registered? <Link href="/login" className="text-brand-700">Sign in</Link></p>
     </AuthShell>
   );
 }

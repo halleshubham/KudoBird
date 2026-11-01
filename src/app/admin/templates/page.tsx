@@ -11,11 +11,11 @@ export default async function AdminTemplates() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Starter templates</h1>
-      <p className="max-w-2xl text-sm text-gray-600">The gallery organisations can clone. Saving a design creates a new version of the starter; organisations that already cloned one keep their own copy, unchanged.</p>
+      <p className="max-w-2xl text-sm text-neutral-600">The gallery organisations can clone. Saving a design creates a new version of the starter; organisations that already cloned one keep their own copy, unchanged.</p>
       <div className="space-y-4">
         {templates.map((t) => (
           <details key={t.id} className="card" open={templates.length <= 1}>
-            <summary className="cursor-pointer font-semibold">{t.name} <span className="text-sm font-normal text-gray-500">· {t.preset} · v{t.latestVersion}</span></summary>
+            <summary className="cursor-pointer font-semibold">{t.name} <span className="text-sm font-normal text-neutral-500">· {t.preset} · v{t.latestVersion}</span></summary>
             <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
               <div className="space-y-3">
                 <ActionForm action={renameTemplateAction} submit="Rename"><input type="hidden" name="id" value={t.id} /><Field name="name" label="Name" defaultValue={t.name} required /><Field name="description" label="Description" defaultValue={t.description ?? ""} /></ActionForm>

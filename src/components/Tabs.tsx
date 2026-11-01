@@ -9,9 +9,9 @@ export function CampaignTabs({ id, active }: { id: string; active: "overview" | 
     ["bulk", "Bulk issue", `/app/campaigns/${id}/bulk`],
   ] as const;
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b text-sm">
+    <nav className="flex gap-1 overflow-x-auto border-b border-black/10 text-sm">
       {tabs.map(([key, label, href]) => (
-        <Link key={key} href={href} className={`whitespace-nowrap px-3 py-2 ${active === key ? "border-b-2 border-brand-600 font-semibold text-brand-700" : "text-gray-600"}`}>{label}</Link>
+        <Link key={key} href={href} className={`whitespace-nowrap px-3 py-2.5 font-medium ${active === key ? "border-b-2 border-brand-600 text-brand-700" : "text-neutral-500 hover:text-neutral-900"}`}>{label}</Link>
       ))}
     </nav>
   );

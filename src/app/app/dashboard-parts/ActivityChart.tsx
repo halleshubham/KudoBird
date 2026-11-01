@@ -47,11 +47,11 @@ export function ActivityChart({ series, unit = "certificate" }: { series: { date
         </svg>
         {active && (
           <div className="pointer-events-none absolute top-0 rounded-md border bg-white px-2 py-1 text-xs shadow" style={{ left: `${Math.min(80, Math.max(0, ((PAD.l + (hover! + 0.5) * step) / W) * 100 - 8))}%` }} role="status">
-            <p className="text-gray-500">{fmt(active.date)}</p><p className="font-semibold">{active.count} {unit}{active.count === 1 ? "" : "s"}</p>
+            <p className="text-neutral-500">{fmt(active.date)}</p><p className="font-semibold">{active.count} {unit}{active.count === 1 ? "" : "s"}</p>
           </div>
         )}
       </div>
-      <details className="text-xs text-gray-600">
+      <details className="text-xs text-neutral-600">
         <summary className="cursor-pointer">View as table</summary>
         <table className="mt-2 w-full max-w-xs text-left"><thead><tr><th className="py-1">Date</th><th className="capitalize">{unit}s</th></tr></thead>
           <tbody>{series.filter((s) => s.count > 0).map((s) => <tr key={s.date} className="border-t"><td className="py-1">{fmt(s.date)}</td><td>{s.count}</td></tr>)}</tbody></table>

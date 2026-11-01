@@ -20,11 +20,11 @@ export default async function PublicOrgPage({ params }: { params: Promise<{ org:
         <h1 className="text-2xl font-bold" style={{ color: o.primaryColor ?? undefined }}>{o.name}</h1>
       </header>
       <ul className="space-y-3">
-        {o.campaigns.length === 0 && <li className="text-gray-600">—</li>}
+        {o.campaigns.length === 0 && <li className="text-neutral-600">—</li>}
         {o.campaigns.map((c) => (
           <li key={c.slug} className="rounded-lg border bg-white p-4">
             <Link href={`/o/${o.slug}/${c.slug}`} className="font-semibold underline" style={{ color: o.primaryColor ?? undefined }}>{c.name}</Link>
-            {c.description && <p className="mt-1 text-sm text-gray-700">{c.description}</p>}
+            {c.description && <p className="mt-1 text-sm text-neutral-700">{c.description}</p>}
           </li>
         ))}
       </ul>

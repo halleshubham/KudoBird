@@ -100,9 +100,9 @@ export function Designer(props: {
           <details open className="card"><summary className="cursor-pointer font-semibold">Starting layout</summary>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {props.presets.map((p) => (
-                <button key={p.key} type="button" className={`rounded border p-2 text-left ${design.preset === p.key ? "border-brand-600 bg-brand-50" : "border-gray-200"}`}
+                <button key={p.key} type="button" className={`rounded border p-2 text-left ${design.preset === p.key ? "border-brand-600 bg-brand-50" : "border-neutral-200"}`}
                   onClick={() => { if (confirm("Replace the current design with this preset?")) setDesign(structuredClone(p.design)); }}>
-                  <span className="font-medium">{p.name}</span><br /><span className="text-xs text-gray-500">{p.description}</span>
+                  <span className="font-medium">{p.name}</span><br /><span className="text-xs text-neutral-500">{p.description}</span>
                 </button>
               ))}
             </div>
@@ -165,7 +165,7 @@ export function Designer(props: {
           })}
           <details className="card"><summary className="cursor-pointer font-semibold">Signatories & QR</summary>
             <div className="mt-2 space-y-2">
-              {props.signatories.length === 0 && <p className="text-gray-500">Add signatories in the Signatories library first.</p>}
+              {props.signatories.length === 0 && <p className="text-neutral-500">Add signatories in the Signatories library first.</p>}
               {sigIds.map((id, i) => { const s = props.signatories.find((x) => x.id === id); return s && (
                 <div key={id} className="flex items-center gap-2"><span className="flex-1">{i + 1}. {s.name}</span>
                   <button type="button" disabled={i === 0} onClick={() => setSigIds((a) => { const n = [...a]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; })}>↑</button>
@@ -186,10 +186,10 @@ export function Designer(props: {
           </details>
           <div className="flex items-center gap-3">
             <button type="button" className="btn" disabled={pending} onClick={() => start(async () => setMsg(await props.save(props.campaignId, props.templateId, design, sigIds)))}>{pending ? "Saving…" : "Save new version"}</button>
-            <span className="text-gray-500">Current: v{props.version}</span>
+            <span className="text-neutral-500">Current: v{props.version}</span>
           </div>
         </fieldset>
-        {dis && <p className="text-gray-600">You have read-only access to this design.</p>}
+        {dis && <p className="text-neutral-600">You have read-only access to this design.</p>}
         {msg?.error && <p className="rounded bg-red-50 p-2 text-red-700">{msg.error}</p>}
         {msg?.info && <p className="rounded bg-green-50 p-2 text-green-800">{msg.info}</p>}
       </div>
@@ -197,10 +197,10 @@ export function Designer(props: {
         <select className="input !w-auto" value={size} onChange={(e) => setSize(e.target.value as keyof typeof SIZES)} aria-label="Preview size">
           <option value="square">Square 1080×1080</option><option value="story">Story 1080×1920</option><option value="link">Link preview 1200×630</option><option value="a4">A4 landscape</option>
         </select>
-        <div ref={box} className="w-full overflow-hidden rounded border bg-gray-100" style={{ height: h * scale }}>
+        <div ref={box} className="w-full overflow-hidden rounded border bg-neutral-100" style={{ height: h * scale }}>
           <iframe title="Certificate preview" srcDoc={html} sandbox="allow-same-origin" style={{ width: w, height: h, border: 0, transform: `scale(${scale})`, transformOrigin: "top left", background: "#fff" }} />
         </div>
-        <p className="text-xs text-gray-500">Preview uses sample data and updates as you type. Saving creates a new version; certificates already issued keep the version they were issued with.</p>
+        <p className="text-xs text-neutral-500">Preview uses sample data and updates as you type. Saving creates a new version; certificates already issued keep the version they were issued with.</p>
       </div>
     </div>
   );

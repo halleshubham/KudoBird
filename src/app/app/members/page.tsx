@@ -20,7 +20,7 @@ export default async function Members() {
             <div key={m.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{m.user.name ?? m.user.email}</p>
-                <p className="truncate text-gray-500">{m.user.email}</p>
+                <p className="truncate text-neutral-500">{m.user.email}</p>
               </div>
               {editable ? (
                 <form action={changeRoleAction} className="flex gap-2">
@@ -30,7 +30,7 @@ export default async function Members() {
                   </select>
                   <button className="btn-ghost">Update</button>
                 </form>
-              ) : <span className="text-gray-600">{m.role}</span>}
+              ) : <span className="text-neutral-600">{m.role}</span>}
               {(editable || m.userId === user.id) && (
                 <form action={removeMemberAction}>
                   <input type="hidden" name="userId" value={m.userId} />

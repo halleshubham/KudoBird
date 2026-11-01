@@ -20,14 +20,14 @@ export default async function AdminOrgs({ searchParams }: { searchParams: Promis
       <form className="flex flex-wrap gap-2 text-sm">
         <input name="q" defaultValue={sp.q} placeholder="Search name or address" className="input !w-64" />
         <select name="status" defaultValue={status ?? ""} className="input !w-auto"><option value="">All (not deleted)</option><option value="ACTIVE">Active</option><option value="SUSPENDED">Suspended</option><option value="DELETED">Deleted</option></select>
-        <button className="btn-ghost">Filter</button><span className="self-center text-gray-500">{list.total} organisations</span>
+        <button className="btn-ghost">Filter</button><span className="self-center text-neutral-500">{list.total} organisations</span>
       </form>
       <div className="card overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-xs text-gray-500"><tr><th className="py-1">Name</th><th>Plan</th><th>Status</th><th>Members</th><th>Campaigns</th><th>Certificates (month / all)</th><th>Storage</th><th>Created</th></tr></thead>
+          <thead className="text-xs text-neutral-500"><tr><th className="py-1">Name</th><th>Plan</th><th>Status</th><th>Members</th><th>Campaigns</th><th>Certificates (month / all)</th><th>Storage</th><th>Created</th></tr></thead>
           <tbody>{list.rows.map((o) => (
-            <tr key={o.id} className="border-t"><td className="py-1"><Link className="text-brand-700 underline" href={`/admin/orgs/${o.id}`}>{o.name}</Link><span className="block text-xs text-gray-500">/o/{o.slug}</span></td>
-              <td>{o.plan.name}</td><td><span className={`rounded px-2 py-0.5 text-xs ${o.deletedAt ? "bg-gray-200" : o.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>{o.deletedAt ? "deleted" : o.status.toLowerCase()}</span></td>
+            <tr key={o.id} className="border-t"><td className="py-1"><Link className="text-brand-700 underline" href={`/admin/orgs/${o.id}`}>{o.name}</Link><span className="block text-xs text-neutral-500">/o/{o.slug}</span></td>
+              <td>{o.plan.name}</td><td><span className={`rounded px-2 py-0.5 text-xs ${o.deletedAt ? "bg-neutral-200" : o.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>{o.deletedAt ? "deleted" : o.status.toLowerCase()}</span></td>
               <td>{o.members}</td><td>{o.campaigns}</td><td>{o.certificatesThisMonth} / {o.certificates}</td><td>{fmtBytes(o.storageBytes)}</td><td>{o.createdAt.toISOString().slice(0, 10)}</td></tr>
           ))}</tbody>
         </table>

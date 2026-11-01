@@ -14,18 +14,18 @@ export default async function AdminUsers({ searchParams }: { searchParams: Promi
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Users</h1>
-      <form className="flex gap-2 text-sm"><input name="q" defaultValue={sp.q} placeholder="Search email or name" className="input !w-72" /><button className="btn-ghost">Search</button><span className="self-center text-gray-500">{list.total} users</span></form>
+      <form className="flex gap-2 text-sm"><input name="q" defaultValue={sp.q} placeholder="Search email or name" className="input !w-72" /><button className="btn-ghost">Search</button><span className="self-center text-neutral-500">{list.total} users</span></form>
       <div className="card divide-y">
         {list.rows.map((u) => (
           <div key={u.id} className="space-y-1 py-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{u.name ?? u.email}</span><span className="text-gray-500">{u.email}</span>
-              {u.isSuperAdmin && <span className="rounded bg-gray-900 px-2 py-0.5 text-xs text-white">platform admin</span>}
+              <span className="font-medium">{u.name ?? u.email}</span><span className="text-neutral-500">{u.email}</span>
+              {u.isSuperAdmin && <span className="rounded bg-neutral-900 px-2 py-0.5 text-xs text-white">platform admin</span>}
               {u.disabled && <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">disabled</span>}
               {!u.verified && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">unverified</span>}
-              <span className="text-xs text-gray-500">{u.twoFactor ? "2FA on" : "2FA off"}</span>
+              <span className="text-xs text-neutral-500">{u.twoFactor ? "2FA on" : "2FA off"}</span>
             </div>
-            <p className="text-xs text-gray-600">{u.orgs.length === 0 ? "No organisations" : u.orgs.map((o) => <span key={o.id} className="mr-2"><Link className="text-brand-700 underline" href={`/admin/orgs/${o.id}`}>{o.name}</Link> ({o.role.toLowerCase()}{o.status !== "ACTIVE" ? ", suspended" : ""})</span>)}</p>
+            <p className="text-xs text-neutral-600">{u.orgs.length === 0 ? "No organisations" : u.orgs.map((o) => <span key={o.id} className="mr-2"><Link className="text-brand-700 underline" href={`/admin/orgs/${o.id}`}>{o.name}</Link> ({o.role.toLowerCase()}{o.status !== "ACTIVE" ? ", suspended" : ""})</span>)}</p>
             <div className="flex flex-wrap gap-2">
               {u.id !== admin.id && <ActionButton action={disableUserAction} fields={{ userId: u.id, disable: u.disabled ? "0" : "1" }} label={u.disabled ? "Enable" : "Disable"} confirm={u.disabled ? undefined : `Disable ${u.email}? They are signed out everywhere.`} />}
               <ActionButton action={resetPasswordAction} fields={{ userId: u.id }} label="Send password reset" />

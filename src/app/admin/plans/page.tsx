@@ -27,7 +27,7 @@ export default async function AdminPlans() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Plans</h1>
-      <p className="max-w-2xl text-sm text-gray-600">Plans are configuration. Every limited action in the product asks the entitlement service, which reads these values, so switching on paid tiers means editing plans here, not changing code. Edits take effect immediately for every organisation on the plan. Billing providers (Razorpay / Stripe) are not connected yet.</p>
+      <p className="max-w-2xl text-sm text-neutral-600">Plans are configuration. Every limited action in the product asks the entitlement service, which reads these values, so switching on paid tiers means editing plans here, not changing code. Edits take effect immediately for every organisation on the plan. Billing providers (Razorpay / Stripe) are not connected yet.</p>
       <div className="grid gap-4 lg:grid-cols-2">
         {plans.map((p) => <PlanForm key={p.id} orgs={p.orgs} p={{ key: p.key, name: p.name, limits: p.limits as Record<string, number>, features: p.features as Record<string, boolean>, isDefault: p.isDefault, active: p.active }} />)}
         <PlanForm />

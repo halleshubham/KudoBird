@@ -26,25 +26,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       )}
       {announcement && <div className="bg-brand-50 px-4 py-2 text-center text-sm text-brand-700" role="status">{announcement}</div>}
-      <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3">
-          <span className="font-bold text-brand-700">KudoBird</span>
+      <header className="sticky top-0 z-10 border-b border-black/10 bg-white/85 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
+          <Link href="/app" className="flex items-center gap-2 text-lg font-bold tracking-tight text-neutral-900"><span className="inline-block h-5 w-5 rounded-md bg-brand-600" aria-hidden />KudoBird</Link>
           <form action={switchOrgAction}>
             <select name="orgId" defaultValue={ctx.orgId} className="input !w-auto" aria-label="Organisation">
               {orgs.map((o) => <option key={o.org.id} value={o.org.id}>{o.org.name}</option>)}
             </select>
             <button className="btn-ghost ml-2">Switch</button>
           </form>
-          <nav className="flex gap-4 text-sm">
-            {nav.map((n) => <Link key={n.href} href={n.href} className="text-gray-700 hover:text-brand-700">{n.label}</Link>)}
+          <nav className="flex flex-wrap gap-1 text-sm">
+            {nav.map((n) => <Link key={n.href} href={n.href} className="rounded-lg px-3 py-1.5 font-medium text-neutral-600 transition-colors hover:bg-black/5 hover:text-neutral-900">{n.label}</Link>)}
           </nav>
           <form action={logoutAction} className="ml-auto text-sm">
-            <span className="mr-3 text-gray-500">{user.email} · {role.toLowerCase()}</span>
-            <button className="text-brand-700">Sign out</button>
+            <span className="mr-3 text-neutral-500">{user.email} · {role.toLowerCase()}</span>
+            <button className="font-medium text-brand-700 hover:underline">Sign out</button>
           </form>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
     </div>
   );
 }

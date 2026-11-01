@@ -42,7 +42,7 @@ Without `RESEND_API_KEY`, emails are printed to the server console (verification
 | `RESEND_API_KEY`, `EMAIL_FROM`, `RESEND_WEBHOOK_SECRET` | Email delivery and webhook verification |
 | `SENTRY_DSN` | Optional error monitoring |
 | `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` | Cloudflare Turnstile bot check on the public form. Unset = bot check is skipped (dev). **Set both in production.** |
-| `STORAGE_DRIVER` | `local` (default, `STORAGE_DIR`) or `s3` (`S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`; works with Cloudflare R2) |
+| `STORAGE_DRIVER` | `auto` (default): Cloudflare R2 when `R2_ACCOUNT_ID`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` are set, otherwise local disk (`STORAGE_DIR`). With R2 on, reads that miss R2 fall back to disk, so existing files keep working. `local` / `s3` force one backend. Other S3-compatible stores: set `S3_ENDPOINT` instead of `R2_ACCOUNT_ID`. |
 | `FONT_CACHE_DIR` | Where downloaded Google fonts are cached (default `./storage/fonts`) |
 
 The environment is validated at startup; the app refuses to run with a clear message if something is missing or invalid.
@@ -221,7 +221,7 @@ pnpm typecheck
 
 Tags: `sha-<short commit>` (immutable, use this for deployments), the branch name, `v*` release tags, and `latest` (default branch only). Packages are private by default on GitHub: after the first publish, open each package (Profile > Packages > kudobird-web / kudobird-worker > Package settings) and set the visibility to **Public** so servers can pull without credentials.
 
-**Deploy with Coolify (or any Docker host).** `deploy/docker-compose.coolify.yml` is the whole production stack: Postgres, Redis, web, worker and a nightly backup job. Web and worker share one `/data` volume (uploads, rendered certificates, font cache), which is why they must run in the same stack unless you switch to S3-compatible storage (`STORAGE_DRIVER=s3`).
+**Deploy with Coolify (or any Docker host).** `deploy/docker-compose.coolify.yml` is the whole production stack: Postgres, Redis, web, worker and a nightly backup job. Web and worker share one `/data` volume (uploads, rendered certificates, font cache), which is why they must run in the same stack unless you configure Cloudflare R2. To move existing files to R2: set the R2 variables, redeploy, then run `pnpm storage:migrate` inside the web container (add `--delete-local` once you are happy).
 
 1. In Coolify create a *Docker Compose* service from that file, point the domain at the **web** service on port **3000**, and set the variables listed at the top of the file. Generate long random values for `AUTH_SECRET`, `POSTGRES_PASSWORD`, `APP_DB_PASSWORD` and `REDIS_PASSWORD`.
 2. Set `IMAGE_TAG` to the commit you want (for example `sha-1a2b3c4`) and deploy. The first start takes a minute or two (the database is created and migrated).

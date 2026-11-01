@@ -18,7 +18,7 @@ export default async function TwoFactor() {
           <p>Scan with Google Authenticator, Authy or similar, then enter the 6-digit code.</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={qr} alt="2FA QR code" width={180} height={180} />
-          <p className="break-all text-xs text-gray-500">Or enter manually: {setup!.secret}</p>
+          <p className="break-all text-xs text-neutral-500">Or enter manually: {setup!.secret}</p>
         </div>
       )}
       <ActionForm action={verifyTotpAction} submit="Verify">

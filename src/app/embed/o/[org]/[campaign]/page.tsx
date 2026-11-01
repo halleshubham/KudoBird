@@ -21,9 +21,9 @@ export default async function EmbeddedForm({ params, searchParams }: { params: P
     <main lang={lang} className="mx-auto max-w-md px-3 py-3" style={{ fontFamily: "system-ui, 'Noto Sans Devanagari', 'Mukta', sans-serif" }}>
       <EmbedResizer />
       <h1 className="mb-1 text-xl font-bold leading-snug">{c.name}</h1>
-      {c.description && <p className="mb-2 text-gray-700">{c.description}</p>}
+      {c.description && <p className="mb-2 text-neutral-700">{c.description}</p>}
       {c.settings.languages.length > 1 && (
-        <nav aria-label={m.language} className="mb-3 flex gap-3 text-sm">{c.settings.languages.map((l) => <Link key={l} href={`?lang=${l}`} prefetch={false} className={l === lang ? "font-bold underline" : "text-gray-600"}>{NAMES[l]}</Link>)}</nav>
+        <nav aria-label={m.language} className="mb-3 flex gap-3 text-sm">{c.settings.languages.map((l) => <Link key={l} href={`?lang=${l}`} prefetch={false} className={l === lang ? "font-bold underline" : "text-neutral-600"}>{NAMES[l]}</Link>)}</nav>
       )}
       {c.status !== "ACTIVE" ? <p className="rounded-md bg-amber-50 p-3">{m.closed}</p> : (
         <PublicForm

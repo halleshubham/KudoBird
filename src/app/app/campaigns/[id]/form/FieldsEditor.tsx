@@ -17,7 +17,7 @@ export function FieldsEditor({ campaignId, initial, action }: { campaignId: stri
       <input type="hidden" name="fields" value={JSON.stringify(fields)} />
       {state?.error && <Notice kind="error">{state.error}</Notice>}
       {state?.info && <Notice kind="info">{state.info}</Notice>}
-      <p className="text-sm text-gray-600">Full name and mobile number are always asked. Email is optional. Add your own fields below.</p>
+      <p className="text-sm text-neutral-600">Full name and mobile number are always asked. Email is optional. Add your own fields below.</p>
       {fields.map((f, i) => (
         <div key={i} className="card space-y-2 text-sm">
           <div className="grid gap-2 sm:grid-cols-3">

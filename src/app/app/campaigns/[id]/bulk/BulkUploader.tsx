@@ -32,9 +32,9 @@ export function BulkUploader({ campaignId, actions }: { campaignId: string; acti
     <div className="space-y-4">
       <div className="card space-y-2 text-sm">
         <p className="font-semibold">1. Upload a CSV</p>
-        <p className="text-gray-600">Columns: <code>name</code>, <code>mobile</code>, optional <code>email</code>, plus any of the campaign&apos;s custom field keys. Up to 2,000 rows. <a className="text-brand-700 underline" href={`/api/campaigns/${campaignId}/bulk-template`}>Download a template</a>.</p>
+        <p className="text-neutral-600">Columns: <code>name</code>, <code>mobile</code>, optional <code>email</code>, plus any of the campaign&apos;s custom field keys. Up to 2,000 rows. <a className="text-brand-700 underline" href={`/api/campaigns/${campaignId}/bulk-template`}>Download a template</a>.</p>
         <input type="file" accept=".csv,text/csv" className="input" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
-        {pending && <p className="text-gray-500" role="status">Checking {fileName}…</p>}
+        {pending && <p className="text-neutral-500" role="status">Checking {fileName}…</p>}
         {error && <p className="rounded bg-red-50 p-2 text-red-700" role="alert">{error}</p>}
       </div>
 
@@ -50,18 +50,18 @@ export function BulkUploader({ campaignId, actions }: { campaignId: string; acti
           {preview.overLimit && <p className="rounded bg-red-50 p-2 text-red-700" role="alert">Your plan allows {preview.remaining} more certificate(s) this month, but this file would issue {preview.willIssue}. Remove rows or ask your administrator to raise the limit.</p>}
           <div className="max-h-96 overflow-auto rounded border">
             <table className="w-full text-left">
-              <thead className="sticky top-0 bg-gray-50"><tr><th className="p-2">Line</th><th className="p-2">Name</th><th className="p-2">Mobile</th><th className="p-2">Status</th></tr></thead>
+              <thead className="sticky top-0 bg-neutral-50"><tr><th className="p-2">Line</th><th className="p-2">Name</th><th className="p-2">Mobile</th><th className="p-2">Status</th></tr></thead>
               <tbody>
                 {preview.rows.map((r) => (
                   <tr key={r.line} className="border-t align-top">
-                    <td className="p-2 text-gray-500">{r.line}</td><td className="p-2">{r.name}</td><td className="p-2">{r.mobileMasked}</td>
+                    <td className="p-2 text-neutral-500">{r.line}</td><td className="p-2">{r.name}</td><td className="p-2">{r.mobileMasked}</td>
                     <td className="p-2"><span className={`rounded px-2 py-0.5 ${STYLE[r.status]}`}>{LABEL[r.status]}</span>{r.errors.map((e, i) => <p key={i} className="text-xs text-red-700">{e}</p>)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {preview.rows.length < Object.values(preview.counts).reduce((a, b) => a + b, 0) && <p className="text-xs text-gray-500">Showing the first {preview.rows.length} rows. All rows are checked when you issue.</p>}
+          {preview.rows.length < Object.values(preview.counts).reduce((a, b) => a + b, 0) && <p className="text-xs text-neutral-500">Showing the first {preview.rows.length} rows. All rows are checked when you issue.</p>}
           <p className="font-semibold">3. Issue</p>
           <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={attested} onChange={(e) => setAttested(e.target.checked)} /> I confirm that each person listed has given consent for their details to be used to issue this certificate.</label>
           <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={emails} onChange={(e) => setEmails(e.target.checked)} /> Email each certificate to people who have an email address (otherwise nothing is sent; you can resend individually).</label>

@@ -11,7 +11,7 @@ export default async function Settings() {
   return (
     <div className="max-w-md space-y-4">
       <h1 className="text-2xl font-bold">Organisation settings</h1>
-      <p className="text-sm text-gray-600">Public page: <a className="text-brand-700 underline" href={`/o/${org.slug}`} target="_blank">/o/{org.slug}</a></p>
+      <p className="text-sm text-neutral-600">Public page: <a className="text-brand-700 underline" href={`/o/${org.slug}`} target="_blank">/o/{org.slug}</a></p>
       {can(role, "org.update") ? (
         <div className="card">
           <ActionForm action={updateOrgAction} submit="Save">
@@ -20,7 +20,7 @@ export default async function Settings() {
           </ActionForm>
           <div className="mt-4 border-t pt-4"><p className="mb-2 text-sm font-medium">Logo (shown on your public page)</p><LogoPicker orgSlug={org.slug} hasLogo={!!org.logoAssetId} setLogo={setOrgLogoAction} /></div>
         </div>
-      ) : <p className="text-sm text-gray-600">Only admins can change these settings.</p>}
+      ) : <p className="text-sm text-neutral-600">Only admins can change these settings.</p>}
       <div className="card">
         <p className="mb-2 text-sm font-semibold">Notifications: new entries</p>
         <form action={setNotificationsAction} className="flex items-center gap-2 text-sm">

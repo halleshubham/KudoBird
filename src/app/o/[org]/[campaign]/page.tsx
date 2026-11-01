@@ -26,13 +26,13 @@ export default async function PublicCampaignPage({ params, searchParams }: { par
   return (
     <main lang={lang} className="mx-auto max-w-md px-4 py-6" style={{ fontFamily: "system-ui, 'Noto Sans Devanagari', 'Mukta', sans-serif" }}>
       <header className="mb-5 space-y-1">
-        <p className="text-sm text-gray-600">{c.org.name}</p>
+        <p className="text-sm text-neutral-600">{c.org.name}</p>
         <h1 className="text-2xl font-bold leading-snug">{c.name}</h1>
-        {c.description && <p className="text-gray-700">{c.description}</p>}
+        {c.description && <p className="text-neutral-700">{c.description}</p>}
         {c.settings.languages.length > 1 && (
           <nav aria-label={m.language} className="flex gap-3 pt-2 text-sm">
             {c.settings.languages.map((l) => (
-              <Link key={l} href={`?lang=${l}`} className={l === lang ? "font-bold underline" : "text-gray-600"} prefetch={false}>{NAMES[l]}</Link>
+              <Link key={l} href={`?lang=${l}`} className={l === lang ? "font-bold underline" : "text-neutral-600"} prefetch={false}>{NAMES[l]}</Link>
             ))}
           </nav>
         )}

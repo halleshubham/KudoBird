@@ -55,11 +55,11 @@ export default async function CertificatePage({ params, searchParams }: { params
         <img src={`/c/${c.publicId}/img/square?v=${c.outputs.square.hash}`} alt={`${c.name} · ${c.number}`} width={1080} height={1080} className="w-full rounded-lg border bg-white shadow-sm" />
       ) : revoked ? null : <RenderProgress publicId={c.publicId} failed={c.renderStatus === "FAILED"} labels={{ working: t.working, failed: t.failed }} />}
       <section aria-label={t.verify} className="card space-y-1 text-sm">
-        <p><span className="text-gray-500">{t.issuedTo}:</span> <strong>{c.name}</strong></p>
-        <p><span className="text-gray-500">{t.number}:</span> {c.number}</p>
-        <p><span className="text-gray-500">{t.campaign}:</span> {c.campaign.name}</p>
-        <p><span className="text-gray-500">{t.by}:</span> {c.org.name}</p>
-        <p><span className="text-gray-500">{t.date}:</span> {new Intl.DateTimeFormat(c.locale === "en" ? "en-IN" : `${c.locale}-IN`, { dateStyle: "long", timeZone: "Asia/Kolkata" }).format(c.issuedAt)}</p>
+        <p><span className="text-neutral-500">{t.issuedTo}:</span> <strong>{c.name}</strong></p>
+        <p><span className="text-neutral-500">{t.number}:</span> {c.number}</p>
+        <p><span className="text-neutral-500">{t.campaign}:</span> {c.campaign.name}</p>
+        <p><span className="text-neutral-500">{t.by}:</span> {c.org.name}</p>
+        <p><span className="text-neutral-500">{t.date}:</span> {new Intl.DateTimeFormat(c.locale === "en" ? "en-IN" : `${c.locale}-IN`, { dateStyle: "long", timeZone: "Asia/Kolkata" }).format(c.issuedAt)}</p>
       </section>
       <ViewBeacon publicId={c.publicId} source={source} />
       {ready && !revoked && (

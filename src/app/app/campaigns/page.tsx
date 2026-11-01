@@ -13,11 +13,11 @@ export default async function Campaigns() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Campaigns</h1>
       <div className="card divide-y">
-        {campaigns.length === 0 && <p className="text-sm text-gray-600">No campaigns yet.</p>}
+        {campaigns.length === 0 && <p className="text-sm text-neutral-600">No campaigns yet.</p>}
         {campaigns.map((c) => (
           <Link key={c.id} href={`/app/campaigns/${c.id}`} className="flex items-center justify-between py-3 text-sm hover:text-brand-700">
             <span className="font-medium">{c.name}</span>
-            <span className="text-gray-500">{c.status.toLowerCase()} · {c._count.entries} entries</span>
+            <span className="text-neutral-500">{c.status.toLowerCase()} · {c._count.entries} entries</span>
           </Link>
         ))}
       </div>

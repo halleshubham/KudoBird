@@ -19,7 +19,7 @@ export function RenderProgress({ publicId, failed, labels }: { publicId: string;
   }, [publicId, failed, router]);
   return (
     <div className="flex aspect-square w-full flex-col items-center justify-center gap-3 rounded-lg border bg-white p-6 text-center" role="status" aria-live="polite">
-      {failed ? <p className="text-red-700">{labels.failed}</p> : (<><div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-brand-600" /><p>{labels.working}</p></>)}
+      {failed ? <p className="text-red-700">{labels.failed}</p> : (<><div className="h-10 w-10 animate-spin rounded-full border-4 border-neutral-200 border-t-brand-600" /><p>{labels.working}</p></>)}
     </div>
   );
 }

@@ -28,7 +28,7 @@ export function PublicForm(p: {
     );
   }
   const Err = ({ k }: { k: string }) => (err[k] ? <p className="mt-1 text-sm text-red-700" role="alert">{err[k]}</p> : null);
-  const input = "w-full rounded-md border border-gray-300 px-3 py-3 text-base";
+  const input = "w-full rounded-md border border-neutral-300 px-3 py-3 text-base";
   return (
     <form action={action} className="space-y-4" noValidate>
       {p.captchaSiteKey && <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />}
@@ -38,7 +38,7 @@ export function PublicForm(p: {
       <div><label htmlFor="name" className="mb-1 block font-medium">{m.fullName} *</label>
         <input id="name" name="name" autoComplete="name" defaultValue={v.name} className={input} required /><Err k="name" /></div>
       <div><label htmlFor="mobile" className="mb-1 block font-medium">{m.mobile} *</label>
-        <div className="flex gap-2"><span className="flex items-center rounded-md border bg-gray-50 px-3">{p.dial}</span>
+        <div className="flex gap-2"><span className="flex items-center rounded-md border bg-neutral-50 px-3">{p.dial}</span>
           <input id="mobile" name="mobile" type="tel" inputMode="numeric" autoComplete="tel-national" defaultValue={v.mobile} onChange={(e) => setMobile(e.target.value)} className={input} required /></div>
         <Err k="mobile" />
         {p.otp && (
@@ -51,7 +51,7 @@ export function PublicForm(p: {
             {otpMsg?.error && <p className="text-sm text-red-700">{otpMsg.error}</p>}{otpMsg?.info && <p className="text-sm text-green-700">{otpMsg.info}</p>}
           </div>)}
       </div>
-      <div><label htmlFor="email" className="mb-1 block font-medium">{m.email} <span className="text-gray-500">({m.optional})</span></label>
+      <div><label htmlFor="email" className="mb-1 block font-medium">{m.email} <span className="text-neutral-500">({m.optional})</span></label>
         <input id="email" name="email" type="email" autoComplete="email" defaultValue={v.email} className={input} /><Err k="email" /></div>
       {p.fields.map((f) => (
         <div key={f.key}><label htmlFor={f.key} className="mb-1 block font-medium">{f.label}{f.required ? " *" : ` (${m.optional})`}</label>
@@ -60,7 +60,7 @@ export function PublicForm(p: {
             : <input id={f.key} name={f.key} type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"} defaultValue={v[f.key]} className={input} />}
           <Err k={f.key} /></div>
       ))}
-      <p className="text-sm text-gray-600">{p.purposeText}</p>
+      <p className="text-sm text-neutral-600">{p.purposeText}</p>
       {p.consentRequired && (<div><label className="flex items-start gap-2"><input type="checkbox" name="consent" defaultChecked={v.consent === "on"} className="mt-1 h-5 w-5" /> <span>{p.consentText}</span></label><Err k="consent" /></div>)}
       {p.wall && <label className="flex items-start gap-2"><input type="checkbox" name="wallOptIn" className="mt-1 h-5 w-5" /> <span>{m.wall}</span></label>}
       {p.captchaSiteKey && <div className="cf-turnstile" data-sitekey={p.captchaSiteKey} />}
