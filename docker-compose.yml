@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: kudobird
+      POSTGRES_PASSWORD: kudobird
+      POSTGRES_DB: kudobird
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-roles.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kudobird"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+  web:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://kudobird_app:kudobird_app@postgres:5432/kudobird
+      DIRECT_URL: postgresql://kudobird:kudobird@postgres:5432/kudobird
+      REDIS_URL: redis://redis:6379
+    ports: ["3000:3000"]
+    command: sh -c "pnpm exec prisma migrate deploy && node server.js"
+volumes:
+  pgdata:
+  redisdata:

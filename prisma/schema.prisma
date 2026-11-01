@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// DATABASE_URL  -> restricted app role (subject to Row Level Security)
+// DIRECT_URL    -> table owner, used only by `prisma migrate`
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum AuthTokenType {
+  VERIFY_EMAIL
+  MAGIC_LINK
+  PASSWORD_RESET
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+}
+
+// ---------------------------------------------------------------------------
+// Global tables (no org_id, no RLS)
+// ---------------------------------------------------------------------------
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  name            String?
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  googleId        String?   @unique
+  isSuperAdmin    Boolean   @default(false)
+  totpSecret      String? // AES-GCM encrypted
+  totpEnabledAt   DateTime?
+  disabledAt      DateTime?
+  locale          String    @default("en")
+  createdAt       DateTime  @default(now())
+
+  memberships Membership[]
+  sessions    Session[]
+  tokens      AuthToken[]
+}
+
+model Session {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  tokenHash      String   @unique
+  activeOrgId    String?  @db.Uuid
+  mfaVerified    Boolean  @default(false)
+  // Set when a super admin is impersonating `userId`
+  impersonatorId String?  @db.Uuid
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuthToken {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String?       @db.Uuid
+  email     String
+  type      AuthTokenType
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Plans are configuration. Limits: { "campaigns": 50, "certificatesPerMonth": 10000, ... }
+// -1 means unlimited. Features: { "customDomain": false, "api": false, ... }
+model Plan {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  name      String
+  limits    Json
+  features  Json
+  isDefault Boolean  @default(false)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  organizations Organization[]
+  subscriptions Subscription[]
+}
+
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Tenant tables (RLS enforced, see prisma/migrations/*_rls)
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String
+  slug           String    @unique
+  status         OrgStatus @default(ACTIVE)
+  planId         String    @db.Uuid
+  // Per-org overrides merged over plan limits/features by the entitlement service
+  limitOverrides Json      @default("{}")
+  primaryColor   String?
+  customDomain   String?   @unique
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  plan          Plan           @relation(fields: [planId], references: [id])
+  memberships   Membership[]
+  invites       Invite[]
+  subscriptions Subscription[]
+  usage         UsageCounter[]
+  auditLogs     AuditLog[]
+}
+
+model Membership {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @db.Uuid
+  userId    String   @db.Uuid
+  role      Role
+  createdAt DateTime @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+}
+
+model Invite {
+  id           String    @id @default(uuid()) @db.Uuid
+  orgId        String    @db.Uuid
+  email        String
+  role         Role
+  tokenHash    String    @unique
+  invitedById  String    @db.Uuid
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model Subscription {
+  id          String             @id @default(uuid()) @db.Uuid
+  orgId       String             @db.Uuid
+  planId      String             @db.Uuid
+  status      SubscriptionStatus @default(ACTIVE)
+  provider    String? // "razorpay" | "stripe" (future)
+  providerRef String?
+  currentPeriodEnd DateTime?
+  createdAt   DateTime           @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan Plan         @relation(fields: [planId], references: [id])
+
+  @@index([orgId])
+}
+
+// metric: certificates_issued | emails_sent | storage_bytes | ...
+// period: "YYYY-MM" for monthly metrics, "total" for gauges like storage
+model UsageCounter {
+  id     String @id @default(uuid()) @db.Uuid
+  orgId  String @db.Uuid
+  metric String
+  period String
+  value  BigInt @default(0)
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, metric, period])
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  actorId        String?  @db.Uuid
+  // Set when the action was done by a super admin impersonating actorId
+  impersonatorId String?  @db.Uuid
+  action         String
+  entity         String?
+  entityId       String?
+  meta           Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+}
